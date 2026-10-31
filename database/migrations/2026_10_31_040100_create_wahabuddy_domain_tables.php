@@ -53,7 +53,7 @@ return new class extends Migration
 
         Schema::create('story_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('story_id')->constrained('stories')->restrictOnDelete();
+            $table->foreignId('story_id')->constrained('stories')->cascadeOnDelete();
             $table->string('event');
             $table->uuid('attempt_token')->nullable();
             $table->text('message')->nullable();
@@ -118,8 +118,8 @@ return new class extends Migration
 
         Schema::create('broadcast_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('broadcast_id')->constrained('broadcasts')->restrictOnDelete();
-            $table->foreignId('recipient_id')->nullable()->constrained('broadcast_recipients')->restrictOnDelete();
+            $table->foreignId('broadcast_id')->constrained('broadcasts')->cascadeOnDelete();
+            $table->foreignId('recipient_id')->nullable()->constrained('broadcast_recipients')->cascadeOnDelete();
             $table->string('event');
             $table->text('message')->nullable();
             $table->json('context')->nullable();

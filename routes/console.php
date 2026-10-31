@@ -1,8 +1,8 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+// Media lifecycle (spec H.5): orphaned uploads older than 24h are removed
+// weekly. Referenced media — including anything used by sending/unknown
+// work — is never touched.
+Schedule::command('wahabuddy:prune-orphan-media')->weekly()->mondays()->at('03:17');
