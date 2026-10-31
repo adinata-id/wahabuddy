@@ -1,4 +1,5 @@
 import type { Auth } from '@/types/auth';
+import type { WahaStatus } from '@/types/wahabuddy';
 
 declare module 'react' {
     interface InputHTMLAttributes<T> {
@@ -12,6 +13,7 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            waha: WahaStatus;
             [key: string]: unknown;
         };
     }

@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AppSetting;
+use App\Models\WahaConnection;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -19,7 +21,7 @@ class HandleInertiaRequests extends Middleware
     /**
      * Determines the current asset version.
      *
-     * @see https://inertiajs.com/asset-versioning
+     * @see https://inertiajs.org/asset-versioning
      */
     public function version(Request $request): ?string
     {
@@ -42,6 +44,27 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'waha' => $this->wahaStatus(),
+        ];
+    }
+
+    /**
+     * Connection status + display timezone for the top bar. Sanitized: no
+     * secrets, only the configured/last-test summary.
+     *
+     * @return array<string, mixed>
+     */
+    private function wahaStatus(): array
+    {
+        $connection = WahaConnection::singleton();
+        $settings = AppSetting::singleton();
+
+        return [
+            'configured' => $connection->isConfigured(),
+            'sessionName' => $connection->session,
+            'lastTestStatus' => $connection->last_test_status,
+            'lastTestAt' => $connection->last_test_at?->toAtomString(),
+            'displayTimezone' => $settings->display_timezone,
         ];
     }
 }

@@ -1,8 +1,17 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-react';
+import {
+    BookOpen,
+    Images,
+    LayoutGrid,
+    Menu,
+    Send,
+    Settings as SettingsIcon,
+    Users,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { ConnectionStatusBadge } from '@/components/connection-status-badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -32,7 +41,11 @@ import { UserMenuContent } from '@/components/user-menu-content';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useInitials } from '@/hooks/use-initials';
 import { cn, toUrl } from '@/lib/utils';
+import broadcasts from '@/routes/broadcasts';
+import contacts from '@/routes/contacts';
 import { dashboard } from '@/routes';
+import settings from '@/routes/settings';
+import stories from '@/routes/stories';
 import type { BreadcrumbItem, NavItem } from '@/types';
 
 type Props = {
@@ -45,17 +58,32 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: LayoutGrid,
     },
+    {
+        title: 'Stories',
+        href: stories.index(),
+        icon: Images,
+    },
+    {
+        title: 'Broadcasts',
+        href: broadcasts.index(),
+        icon: Send,
+    },
+    {
+        title: 'Contacts',
+        href: contacts.index(),
+        icon: Users,
+    },
+    {
+        title: 'Settings',
+        href: settings.index(),
+        icon: SettingsIcon,
+    },
 ];
 
 const rightNavItems: NavItem[] = [
     {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: Folder,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
+        title: 'WAHA Documentation',
+        href: 'https://waha.devlike.pro/docs/',
         icon: BookOpen,
     },
 ];
@@ -177,14 +205,11 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <div className="ml-auto flex items-center space-x-2">
+                        <ConnectionStatusBadge />
+                        <span className="hidden text-xs text-muted-foreground md:inline">
+                            {page.props.waha?.displayTimezone}
+                        </span>
                         <div className="relative flex items-center space-x-1">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="group h-9 w-9 cursor-pointer"
-                            >
-                                <Search className="!size-5 opacity-80 group-hover:opacity-100" />
-                            </Button>
                             <div className="ml-1 hidden gap-1 lg:flex">
                                 {rightNavItems.map((item) => (
                                     <Tooltip key={item.title}>
