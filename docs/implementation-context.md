@@ -128,3 +128,57 @@ the matrix on 8.4 + 8.5, and README/deployment docs state the requirement.
 with npm cache) and a PHP matrix (8.4/8.5) on a MySQL 8.4 service —
 PHPStan, Pint --test, and `php artisan test` including the two-process
 integration suites. No live WAHA traffic anywhere.
+
+## Task 10 — final acceptance (2026-10-31)
+
+### Definition of Done review
+
+- Clean-clone quick start via README (MySQL + local storage — user override of
+  the spec's SQLite default; R2/Redis optional and absent) — verified against
+  the Docker path end-to-end; native path follows the same commands.
+- Admin creation safe (`wahabuddy:admin`), public registration 404s — tested.
+- Settings change URL/key/session; secrets encrypted at rest, never in props;
+  revision changes hold old work — tested (SettingsTest, StorySchedulerTest,
+  BroadcastTest).
+- Text/image/video stories: created, scheduled, and sent through the WAHA
+  adapter — all proven with faked HTTP (exact endpoints/payloads asserted).
+  **Live WAHA integration remains unverified**: no WAHA target or test
+  recipient was authorized in this session. Nothing here claims otherwise.
+- Concurrency: two-process integration proofs on shared MySQL for both story
+  and broadcast claims (exactly one winner; only the token owner completes).
+- 3-attempt cap, 60/300s + Retry-After backoff, expiry boundary, UTC
+  persistence + display timezone, stale→unknown recovery, orphan media
+  cleanup, 10k log retention — all under test.
+- Broadcast v1: real text/image sending pipeline with per-recipient jobs,
+  session-shared pacing (8–20s random), 50-attempt batch pauses,
+  pause/resume/cancel, unknown-pauses-campaign, sweeper recovery — tested.
+- Capabilities surface as supported/unsupported/unknown; nothing simulated.
+- CI matrix (PHP 8.4/8.5 on MySQL), PHPStan/Pint/tsc/build green; Docker
+  Compose boot + admin + scheduler tick + restart persistence verified via
+  podman and torn down.
+- Repository audited: no secrets, no private hosts (only the spec copy
+  mentions the research reference instance), no env/backup files tracked.
+
+### Commands run for the final gate
+
+- `php artisan test` → 124 passed, 2 skipped (starter registration tests,
+  disabled by design) — 781 assertions
+- `composer types:check` (PHPStan level 7) → 0 errors
+- `vendor/bin/pint --test` → pass
+- `npm run typecheck` → clean; `npm run build` → success
+- `docker compose config -q` → valid; `podman compose build/up/restart` → OK
+- Browser smoke (lerd + Playwright): login, dashboard, story create,
+  broadcast wizard, settings incl. connection save + JSON test endpoint
+
+### Known limitations (honest)
+
+1. Live WAHA send/delete/sync never executed — no target/recipient was
+   authorized. Adapter fidelity relies on the documented contract (D2) plus
+   sanitized fixtures; a first live smoke against a disposable session is the
+   recommended next step.
+2. SQLite is untested by decision (user chose MySQL); migrations stay
+   portable but CI covers MySQL only.
+3. The laravel-boost MCP plugin never reconnected inside the implementing
+   session (cached failure); `php artisan boost:mcp` itself answers handshakes
+   and `claude mcp list` shows it connected. Context7 was used; Boost skills
+   were configured at install time.
