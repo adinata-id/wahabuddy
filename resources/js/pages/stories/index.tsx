@@ -7,11 +7,11 @@ import {
     useReactTable,
     type ColumnDef,
 } from '@tanstack/react-table';
-import { Images, Plus, RotateCcw, Trash2, XCircle } from 'lucide-react';
+import { BadgeCheck, Images, Plus, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
-import { StatusBadge } from '@/components/status-badge';
+import { StatusBadge, statusLabel } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Spinner } from '@/components/ui/spinner';
@@ -43,6 +43,16 @@ import type {
 
 const columnHelper = createColumnHelper<StoryListItem>();
 
+/** Statuses an admin may set through the bulk "Update status" action. */
+const SETTABLE_STATUSES = [
+    'pending',
+    'sent',
+    'failed',
+    'failed_max',
+    'expired',
+    'canceled',
+] as const;
+
 export default function StoriesIndex({
     stories,
     filters,
@@ -57,7 +67,10 @@ export default function StoriesIndex({
         to: filters.to ?? '',
     });
     const [selected, setSelected] = useState<number[]>([]);
-    const [running, setRunning] = useState<'cancel' | 'retry' | 'delete' | null>(null);
+    const [statusTarget, setStatusTarget] = useState<string>('');
+    const [running, setRunning] = useState<
+        'cancel' | 'retry' | 'delete' | 'set_status' | null
+    >(null);
 
     const pageIds = stories.data.map((story) => story.id);
     const allOnPageSelected =
@@ -81,23 +94,18 @@ export default function StoriesIndex({
         );
     };
 
-    const runBulk = async (action: 'cancel' | 'retry' | 'delete') => {
-        const verb =
-            action === 'cancel'
-                ? 'cancel'
-                : action === 'retry'
-                  ? 'retry'
-                  : 'delete';
-        const withSkipped =
-            action === 'delete'
-                ? ' Records still sending or in unknown state are kept.'
-                : ' Stories not eligible for this action are skipped.';
+    const runBulk = async (
+        action: 'cancel' | 'retry' | 'delete' | 'set_status',
+    ) => {
+        const noun = `${selected.length} selected stor${selected.length === 1 ? 'y' : 'ies'}`;
+        const message =
+            action === 'set_status'
+                ? `Set the status of ${noun} to "${statusLabel(statusTarget)}"? Rows already in that status, currently sending, or unknown are skipped.`
+                : action === 'delete'
+                  ? `Delete ${noun}? Records still sending or in unknown state are kept.`
+                  : `${action === 'cancel' ? 'Cancel' : 'Retry'} ${noun}? Stories not eligible for this action are skipped.`;
 
-        if (
-            !window.confirm(
-                `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${selected.length} selected stor${selected.length === 1 ? 'y' : 'ies'}?${withSkipped}`,
-            )
-        ) {
+        if (!window.confirm(message)) {
             return;
         }
 
@@ -108,10 +116,15 @@ export default function StoriesIndex({
                 updated: number;
                 skipped: number;
                 summary: string;
-            }>(bulkRoute.url(), { action, ids: selected });
+            }>(bulkRoute.url(), {
+                action,
+                ids: selected,
+                ...(action === 'set_status' ? { status: statusTarget } : {}),
+            });
 
             toast.success(result.summary);
             setSelected([]);
+            setStatusTarget('');
             router.reload({ only: ['stories'] });
         } catch {
             toast.error('The bulk action could not be completed.');
@@ -384,6 +397,43 @@ export default function StoriesIndex({
                                         <RotateCcw className="size-4" />
                                     )}
                                     Retry selected
+                                </Button>
+                                <Select
+                                    value={statusTarget}
+                                    onValueChange={setStatusTarget}
+                                >
+                                    <SelectTrigger
+                                        className="h-8 w-36"
+                                        aria-label="Target status"
+                                    >
+                                        <SelectValue placeholder="Set status…" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {SETTABLE_STATUSES.map((status) => (
+                                            <SelectItem
+                                                key={status}
+                                                value={status}
+                                            >
+                                                {statusLabel(status)}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={
+                                        running !== null || statusTarget === ''
+                                    }
+                                    onClick={() => void runBulk('set_status')}
+                                >
+                                    {running === 'set_status' ? (
+                                        <Spinner />
+                                    ) : (
+                                        <BadgeCheck className="size-4" />
+                                    )}
+                                    Update status
                                 </Button>
                                 <Button
                                     type="button"

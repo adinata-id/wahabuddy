@@ -109,29 +109,38 @@ class StoryActionsController extends Controller
 
     /**
      * Bulk status update over a selected set (spec J extension): cancel,
-     * retry, or delete local records. Eligibility matches the single actions
-     * exactly; ineligible rows are skipped and reported, never forced.
+     * retry, delete local records, or set an explicit status. Eligibility
+     * matches the single actions exactly; ineligible rows are skipped and
+     * reported, never forced.
      */
     public function bulk(Request $request): JsonResponse|RedirectResponse
     {
         $validated = $request->validate([
-            'action' => ['required', 'in:cancel,retry,delete'],
+            'action' => ['required', 'in:cancel,retry,delete,set_status'],
             'ids' => ['required', 'array', 'min:1', 'max:200'],
             'ids.*' => ['integer', 'distinct'],
+            // Sending belongs to the send job and unknown requires an
+            // explicit resolution (spec G1/M), so neither is settable.
+            'status' => ['required_if:action,set_status', 'in:pending,sent,failed,failed_max,expired,canceled'],
         ]);
 
         $connection = app(ConnectionRepository::class);
+        $target = $validated['action'] === 'set_status'
+            ? StoryStatus::from($validated['status'])
+            : null;
         $updated = 0;
         $skipped = 0;
 
         Story::query()
             ->whereIn('id', $validated['ids'])
             ->get()
-            ->each(function (Story $story) use ($validated, $connection, &$updated, &$skipped): void {
+            ->each(function (Story $story) use ($validated, $connection, $target, &$updated, &$skipped): void {
                 $eligible = match ($validated['action']) {
                     'cancel' => in_array($story->status, [StoryStatus::Pending, StoryStatus::Failed, StoryStatus::FailedMax, StoryStatus::Expired], true),
                     'retry' => in_array($story->status, [StoryStatus::Failed, StoryStatus::FailedMax, StoryStatus::Expired, StoryStatus::Canceled], true),
                     'delete' => ! in_array($story->status, [StoryStatus::Sending, StoryStatus::Unknown], true),
+                    'set_status' => ! in_array($story->status, [StoryStatus::Sending, StoryStatus::Unknown], true)
+                        && $story->status !== $target,
                     default => false,
                 };
 
@@ -147,6 +156,21 @@ class StoryActionsController extends Controller
                         'message' => 'Local story record deleted (bulk action).',
                     ]);
                     $story->delete();
+                    $updated++;
+
+                    return;
+                }
+
+                if ($validated['action'] === 'set_status') {
+                    $old = $story->status;
+                    $story->forceFill($this->overrideFields($target, $connection->current()->revision));
+                    $story->save();
+
+                    $story->logs()->create([
+                        'event' => 'status_overridden',
+                        'message' => "Admin set the story status from {$old->value} to {$target->value} (bulk action).",
+                        'context' => ['from' => $old->value, 'to' => $target->value],
+                    ]);
                     $updated++;
 
                     return;
@@ -178,12 +202,52 @@ class StoryActionsController extends Controller
                 $updated++;
             });
 
-        $summary = ucfirst($validated['action'])." applied to {$updated} stor".($updated === 1 ? 'y' : 'ies')
+        $lead = $validated['action'] === 'set_status'
+            ? "Status set to {$validated['status']} on"
+            : ucfirst($validated['action']).' applied to';
+        $summary = $lead." {$updated} stor".($updated === 1 ? 'y' : 'ies')
             .($skipped > 0 ? "; {$skipped} skipped (not eligible)." : '.');
 
         return $request->expectsJson()
             ? response()->json(['updated' => $updated, 'skipped' => $skipped, 'summary' => $summary])
             : back()->with('status', 'stories-bulk')->with('bulk_summary', $summary);
+    }
+
+    /**
+     * Field payload for a manual status override. Pending re-enters the send
+     * cycle exactly like a retry; sent stamps the local time without
+     * fabricating WAHA ids; every other target is terminal bookkeeping.
+     *
+     * @return array<string, mixed>
+     */
+    private function overrideFields(StoryStatus $target, int $connectionRevision): array
+    {
+        if ($target === StoryStatus::Pending) {
+            return [
+                'status' => StoryStatus::Pending,
+                'attempts' => 0,
+                'next_attempt_at' => null,
+                'attempt_token' => null,
+                'sending_started_at' => null,
+                'last_error' => null,
+                'last_error_code' => null,
+                'connection_revision' => $connectionRevision,
+            ];
+        }
+
+        if ($target === StoryStatus::Sent) {
+            return [
+                'status' => StoryStatus::Sent,
+                'sent_at' => now(),
+                'attempt_token' => null,
+                'sending_started_at' => null,
+            ];
+        }
+
+        return [
+            'status' => $target,
+            'next_attempt_at' => null,
+        ];
     }
 
     /**
