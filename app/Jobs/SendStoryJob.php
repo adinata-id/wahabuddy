@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Actions\Stories\ClaimStory;
 use App\Actions\Stories\CompleteStory;
+use App\Enums\StoryStatus;
 use App\Models\Story;
 use App\Services\Media\MediaUrlResolver;
 use App\Services\Sending\SessionSendGate;
@@ -70,6 +71,28 @@ class SendStoryJob implements ShouldQueue
         $mediaUrl = null;
         if ($story->mediaFile !== null) {
             $mediaUrl = $urls->forSend($story->mediaFile);
+
+            // Storage purged (cleanup race or an unresolvable disk): fail
+            // the story with an explicit cause instead of sending WAHA a
+            // URL to deleted bytes and failing with a confusing fetch error.
+            if ($mediaUrl === null) {
+                Story::query()
+                    ->whereKey($story->id)
+                    ->where('status', StoryStatus::Pending->value)
+                    ->update([
+                        'status' => StoryStatus::Failed->value,
+                        'next_attempt_at' => null,
+                        'last_error' => 'The media file was removed by cleanup; upload new media and edit the story.',
+                        'last_error_code' => 'media_purged',
+                    ]);
+
+                $story->logs()->create([
+                    'event' => 'failed_held',
+                    'message' => 'The media file was removed by cleanup; upload new media and edit the story.',
+                ]);
+
+                return;
+            }
         }
 
         // Busy session: release the job back without counting an attempt.

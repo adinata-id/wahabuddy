@@ -3,6 +3,7 @@ import { CircleUserRound, KeyRound, Palette } from 'lucide-react';
 import { CapabilitiesCard } from '@/components/settings/capabilities-card';
 import { ConnectionCard } from '@/components/settings/connection-card';
 import { PreferencesCard } from '@/components/settings/preferences-card';
+import { StorageCard } from '@/components/settings/storage-card';
 import Heading from '@/components/heading';
 import settings from '@/routes/settings';
 import { edit as editAppearance } from '@/routes/appearance';
@@ -11,15 +12,18 @@ import { edit as editSecurity } from '@/routes/security';
 import type {
     AppPreferences,
     ConnectionSettings,
+    StorageSettings,
 } from '@/types/wahabuddy';
 
 export default function Settings({
     connection,
     preferences,
+    storage,
     timezones,
 }: {
     connection: ConnectionSettings;
     preferences: AppPreferences;
+    storage: StorageSettings;
     timezones: string[];
 }) {
     return (
@@ -37,6 +41,7 @@ export default function Settings({
                     preferences={preferences}
                     timezones={timezones}
                 />
+                <StorageCard storage={storage} />
 
                 <nav className="flex flex-wrap gap-3 pb-6 text-sm text-muted-foreground">
                     <Link

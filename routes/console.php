@@ -21,5 +21,11 @@ Schedule::job(new RecordWorkerHeartbeatJob)->everyFiveMinutes();
 // work — is never touched.
 Schedule::command('wahabuddy:prune-orphan-media')->weekly()->mondays()->at('03:17');
 
+// Sent-media cleanup: the tick is cheap and the command itself decides
+// whether the configured cadence (daily/weekly/monthly/custom in settings)
+// is due, so a missed maintenance window self-heals instead of waiting a
+// full cadence. Storage of terminal stories/broadcasts is purged; rows stay.
+Schedule::command('wahabuddy:prune-sent-media')->everyFiveMinutes()->withoutOverlapping();
+
 // Log retention (spec G.2): keep the newest 10,000 story log rows.
 Schedule::command('waha:prune-story-logs')->weekly()->mondays()->at('03:33');

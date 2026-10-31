@@ -29,6 +29,10 @@ class StoryActionsController extends Controller
             return back()->withErrors(['story' => 'Only failed, expired, or canceled stories can be retried.']);
         }
 
+        if ($this->mediaPurged($story)) {
+            return back()->withErrors(['story' => 'The media for this story was removed by cleanup; duplicate the story with a fresh upload to send it again.']);
+        }
+
         $connection = app(ConnectionRepository::class)->current();
 
         Story::query()
@@ -133,14 +137,19 @@ class StoryActionsController extends Controller
 
         Story::query()
             ->whereIn('id', $validated['ids'])
+            ->with('mediaFile')
             ->get()
             ->each(function (Story $story) use ($validated, $connection, $target, &$updated, &$skipped): void {
                 $eligible = match ($validated['action']) {
                     'cancel' => in_array($story->status, [StoryStatus::Pending, StoryStatus::Failed, StoryStatus::FailedMax, StoryStatus::Expired], true),
-                    'retry' => in_array($story->status, [StoryStatus::Failed, StoryStatus::FailedMax, StoryStatus::Expired, StoryStatus::Canceled], true),
+                    // A retry re-sends the media; purged storage would fail at
+                    // WAHA with a confusing fetch error, so those rows skip.
+                    'retry' => in_array($story->status, [StoryStatus::Failed, StoryStatus::FailedMax, StoryStatus::Expired, StoryStatus::Canceled], true)
+                        && ! $this->mediaPurged($story),
                     'delete' => ! in_array($story->status, [StoryStatus::Sending, StoryStatus::Unknown], true),
                     'set_status' => ! in_array($story->status, [StoryStatus::Sending, StoryStatus::Unknown], true)
-                        && $story->status !== $target,
+                        && $story->status !== $target
+                        && ! ($target === StoryStatus::Pending && $this->mediaPurged($story)),
                     default => false,
                 };
 
@@ -211,6 +220,15 @@ class StoryActionsController extends Controller
         return $request->expectsJson()
             ? response()->json(['updated' => $updated, 'skipped' => $skipped, 'summary' => $summary])
             : back()->with('status', 'stories-bulk')->with('bulk_summary', $summary);
+    }
+
+    /**
+     * Whether cleanup already removed this story's stored media, making a
+     * re-send impossible without a fresh upload.
+     */
+    private function mediaPurged(Story $story): bool
+    {
+        return $story->mediaFile !== null && $story->mediaFile->purged_at !== null;
     }
 
     /**

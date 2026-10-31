@@ -27,7 +27,7 @@ class StoreStoryRequest extends FormRequest
             'text' => ['nullable', 'string'],
             'background_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'font' => ['nullable', 'integer', 'between:0,6'],
-            'media_file_id' => ['nullable', 'integer', Rule::exists('media_files', 'id')],
+            'media_file_id' => ['nullable', 'integer', Rule::exists('media_files', 'id')->whereNull('purged_at')],
             'scheduled_at' => ['required', 'string', 'max:64'],
             'timezone' => ['nullable', 'string', Rule::in(\DateTimeZone::listIdentifiers())],
         ];
@@ -60,7 +60,7 @@ class StoreStoryRequest extends FormRequest
 
                 $media = MediaFile::find((int) $mediaId);
 
-                if ($media === null) {
+                if ($media === null || $media->purged_at !== null) {
                     $validator->errors()->add('media_file_id', 'The selected media no longer exists.');
 
                     return;

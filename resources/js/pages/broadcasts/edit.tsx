@@ -33,7 +33,7 @@ export default function BroadcastsEdit({
         name: string;
         type: 'text' | 'image';
         template_text: string;
-        media: { url: string; original_name: string } | null;
+        media: { url: string | null; original_name: string } | null;
         media_file_id: number | null;
     };
     recent_media: MediaFileItem[];
@@ -254,11 +254,17 @@ export default function BroadcastsEdit({
                                             Upload image
                                         </Button>
                                         {media ? (
-                                            <img
-                                                src={media.url}
-                                                alt={media.original_name}
-                                                className="size-14 rounded-md border object-cover"
-                                            />
+                                            media.url !== null ? (
+                                                <img
+                                                    src={media.url}
+                                                    alt={media.original_name}
+                                                    className="size-14 rounded-md border object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex size-14 items-center justify-center rounded-md border border-dashed text-center text-[10px] leading-tight text-muted-foreground">
+                                                    File cleaned up
+                                                </div>
+                                            )
                                         ) : images.length > 0 ? (
                                             <Select
                                                 value={

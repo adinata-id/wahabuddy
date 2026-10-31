@@ -20,7 +20,7 @@ class StoreBroadcastRequest extends FormRequest
             'name' => ['required', 'string', 'max:120'],
             'type' => ['required', Rule::enum(BroadcastType::class)],
             'template_text' => ['required', 'string', 'max:4096'],
-            'media_file_id' => ['nullable', 'integer', Rule::exists('media_files', 'id')],
+            'media_file_id' => ['nullable', 'integer', Rule::exists('media_files', 'id')->whereNull('purged_at')],
         ];
     }
 
@@ -38,7 +38,7 @@ class StoreBroadcastRequest extends FormRequest
 
                 $media = $mediaId !== null ? MediaFile::find((int) $mediaId) : null;
 
-                if ($media === null || ! str_starts_with($media->mime_type, 'image/')) {
+                if ($media === null || $media->purged_at !== null || ! str_starts_with($media->mime_type, 'image/')) {
                     $validator->errors()->add('media_file_id', 'Image broadcasts need uploaded image media.');
                 }
             }

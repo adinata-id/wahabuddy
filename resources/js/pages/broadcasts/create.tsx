@@ -233,7 +233,7 @@ export default function BroadcastsCreate({
                                         </Button>
                                         {media ? (
                                             <img
-                                                src={media.url}
+                                                src={media.url ?? undefined}
                                                 alt={media.original_name}
                                                 className="size-14 rounded-md border object-cover"
                                             />

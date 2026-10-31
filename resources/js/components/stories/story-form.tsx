@@ -280,7 +280,7 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
                                     <span className="flex items-center gap-2 text-sm">
                                         {media.mime_type.startsWith('image/') ? (
                                             <img
-                                                src={media.url}
+                                                src={media.url ?? undefined}
                                                 alt={media.original_name}
                                                 className="size-12 rounded-md border object-cover"
                                             />

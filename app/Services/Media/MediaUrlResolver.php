@@ -2,6 +2,7 @@
 
 namespace App\Services\Media;
 
+use App\Models\AppSetting;
 use App\Models\MediaFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -13,12 +14,34 @@ final class MediaUrlResolver
 {
     private const SIGNED_URL_TTL_MINUTES = 15;
 
-    public function forSend(MediaFile $media): string
+    /**
+     * Fresh URL for the send pipeline. Null when the stored object was
+     * purged or its disk can no longer be resolved — the caller must not
+     * hand WAHA a URL to deleted bytes.
+     */
+    public function forSend(MediaFile $media): ?string
     {
-        $disk = Storage::disk($media->disk);
+        if ($media->purged_at !== null) {
+            return null;
+        }
+
+        try {
+            $disk = Storage::disk($media->disk);
+        } catch (\Throwable) {
+            return null;
+        }
 
         if ($this->diskSupportsTemporaryUrls($media->disk)) {
             return $disk->temporaryUrl($media->path, now()->addMinutes(self::SIGNED_URL_TTL_MINUTES));
+        }
+
+        // Local media is unreachable for a remote WAHA, so send URLs may be
+        // pointed at a public base (e.g. a tunnel) from Settings. Previews
+        // keep the app URL — the admin's browser can always reach it.
+        $publicBase = AppSetting::singleton()->media_public_base_url;
+
+        if ($publicBase !== null && $publicBase !== '') {
+            return rtrim((string) $publicBase, '/').'/'.$media->path;
         }
 
         return $disk->url($media->path);
@@ -27,10 +50,21 @@ final class MediaUrlResolver
     /**
      * Long-lived preview URL for UI thumbnails (local public disk or bucket
      * custom domain); falls back to a temporary URL for private disks.
+     * Returns null once the stored object was purged by cleanup (or its
+     * disk cannot be resolved) — callers render a placeholder instead of a
+     * broken URL.
      */
-    public function forPreview(MediaFile $media): string
+    public function forPreview(MediaFile $media): ?string
     {
-        $disk = Storage::disk($media->disk);
+        if ($media->purged_at !== null) {
+            return null;
+        }
+
+        try {
+            $disk = Storage::disk($media->disk);
+        } catch (\Throwable) {
+            return null;
+        }
 
         if ($this->diskSupportsTemporaryUrls($media->disk)) {
             return $disk->temporaryUrl($media->path, now()->addMinutes(self::SIGNED_URL_TTL_MINUTES));

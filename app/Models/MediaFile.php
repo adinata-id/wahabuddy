@@ -19,6 +19,7 @@ class MediaFile extends Model
         'size_bytes',
         'video_codec',
         'created_by',
+        'purged_at',
     ];
 
     protected function casts(): array
@@ -26,6 +27,7 @@ class MediaFile extends Model
         return [
             'size_bytes' => 'integer',
             'created_by' => 'integer',
+            'purged_at' => 'datetime',
         ];
     }
 

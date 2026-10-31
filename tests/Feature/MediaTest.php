@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\MediaFile;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaUrlResolver;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -232,6 +234,70 @@ class MediaTest extends TestCase
         // The temporary probe object must be gone regardless of fetch result.
         $remaining = collect(Storage::disk('public')->allFiles())->filter(fn ($p) => str_starts_with($p, 'stories/'));
         $this->assertCount(0, $remaining);
+        $this->assertDatabaseCount('media_files', 0);
+    }
+
+    public function test_upload_writes_to_the_selected_settings_disk(): void
+    {
+        config(['filesystems.disks.secondary' => [
+            'driver' => 'local',
+            'root' => storage_path('framework/testing/disks/secondary'),
+            'throw' => false,
+        ]]);
+        Storage::fake('secondary');
+        AppSetting::singleton()->forceFill(['media_disk' => 'secondary'])->save();
+        $this->actingAs($this->admin());
+
+        $this->postJson(route('media.store'), ['file' => $this->jpeg()])
+            ->assertOk();
+
+        $media = MediaFile::first();
+        $this->assertSame('secondary', $media->disk);
+        Storage::disk('secondary')->assertExists($media->path);
+    }
+
+    public function test_upload_returns_422_when_storage_write_fails(): void
+    {
+        $this->actingAs($this->admin());
+
+        $disk = $this->mock(FilesystemAdapter::class);
+        $disk->shouldReceive('put')->andReturn(false);
+        Storage::shouldReceive('disk')->with('public')->andReturn($disk);
+
+        $this->postJson(route('media.store'), ['file' => $this->jpeg()])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.file.0', fn ($m) => str_contains($m, 'Storing the upload failed'));
+
+        $this->assertDatabaseCount('media_files', 0);
+    }
+
+    public function test_upload_returns_422_when_disk_driver_cannot_be_resolved(): void
+    {
+        $this->actingAs($this->admin());
+        AppSetting::singleton()->forceFill(['media_disk' => 's3'])->save();
+
+        // No S3 adapter installed: driver resolution itself throws, which
+        // must surface as a friendly 422 instead of a 500.
+        $this->postJson(route('media.store'), ['file' => $this->jpeg()])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.file.0', fn ($m) => str_contains($m, 'Storing the upload failed'));
+
+        $this->assertDatabaseCount('media_files', 0);
+    }
+
+    public function test_storage_probe_accepts_disk_param_and_reports_missing_s3_adapter(): void
+    {
+        $this->actingAs($this->admin());
+
+        $this->postJson(route('media.test-storage'), ['disk' => 'not-a-disk'])
+            ->assertStatus(422);
+
+        // Without the S3 adapter installed the probe must degrade to
+        // reachable=false instead of a fatal driver error.
+        $response = $this->postJson(route('media.test-storage'), ['disk' => 's3']);
+
+        $response->assertOk();
+        $this->assertFalse($response->json('reachable'));
         $this->assertDatabaseCount('media_files', 0);
     }
 }

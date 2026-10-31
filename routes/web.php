@@ -7,6 +7,7 @@ use App\Http\Controllers\MediaController;
 use App\Http\Controllers\Settings\ConnectionController;
 use App\Http\Controllers\Settings\PreferencesController;
 use App\Http\Controllers\Settings\SettingsController;
+use App\Http\Controllers\Settings\StorageController;
 use App\Http\Controllers\StoryActionsController;
 use App\Http\Controllers\StoryController;
 use Illuminate\Support\Facades\Route;
@@ -79,6 +80,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:6,1')->name('settings.connection.clear-basic-auth');
     Route::put('settings/preferences', [PreferencesController::class, 'update'])
         ->middleware('throttle:10,1')->name('settings.preferences.update');
+    Route::post('settings/storage/cleanup-run', [StorageController::class, 'runCleanup'])
+        ->middleware('throttle:5,1')->name('settings.storage.cleanup-run');
+    Route::post('settings/storage/check-public-url', [StorageController::class, 'checkPublicUrl'])
+        ->middleware('throttle:5,1')->name('settings.storage.check-public-url');
 });
 
 require __DIR__.'/settings.php';

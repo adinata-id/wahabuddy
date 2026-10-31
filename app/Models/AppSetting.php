@@ -15,6 +15,16 @@ class AppSetting extends Model
         'broadcast_delay_max',
         'broadcast_batch_size',
         'broadcast_batch_pause',
+        'media_disk',
+        'media_public_base_url',
+        'media_cleanup_enabled',
+        'media_cleanup_frequency',
+        'media_cleanup_day',
+        'media_cleanup_interval_days',
+        'media_cleanup_retention_days',
+        'media_cleanup_include_terminal',
+        'media_cleanup_last_run_at',
+        'media_cleanup_next_run_at',
     ];
 
     protected function casts(): array
@@ -25,6 +35,13 @@ class AppSetting extends Model
             'broadcast_delay_max' => 'integer',
             'broadcast_batch_size' => 'integer',
             'broadcast_batch_pause' => 'integer',
+            'media_cleanup_enabled' => 'boolean',
+            'media_cleanup_day' => 'integer',
+            'media_cleanup_interval_days' => 'integer',
+            'media_cleanup_retention_days' => 'integer',
+            'media_cleanup_include_terminal' => 'boolean',
+            'media_cleanup_last_run_at' => 'datetime',
+            'media_cleanup_next_run_at' => 'datetime',
         ];
     }
 
@@ -43,6 +60,9 @@ class AppSetting extends Model
 
         return static::create([
             'display_timezone' => config('wahabuddy.display_timezone', 'Asia/Jakarta'),
+            // MEDIA_DISK seeds the initial disk choice; afterwards the
+            // setting is the source of truth (editable in the UI).
+            'media_disk' => (string) config('wahabuddy.media_disk', 'public'),
         ])->refresh();
     }
 }

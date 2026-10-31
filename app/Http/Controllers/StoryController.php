@@ -195,7 +195,7 @@ class StoryController extends Controller
     {
         $timezone = AppSetting::singleton()->display_timezone;
 
-        $recentMedia = MediaFile::orderByDesc('created_at')->limit(30)->get()->map(fn (MediaFile $media) => [
+        $recentMedia = MediaFile::whereNull('purged_at')->orderByDesc('created_at')->limit(30)->get()->map(fn (MediaFile $media) => [
             'id' => $media->id,
             'original_name' => $media->original_name,
             'mime_type' => $media->mime_type,

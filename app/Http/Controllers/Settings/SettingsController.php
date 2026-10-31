@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\MediaCleanupRun;
+use App\Models\MediaFile;
 use App\Models\WahaConnection;
+use App\Services\Media\SentMediaCleanup;
 use App\Services\Waha\CapabilityResolver;
 use App\Services\Waha\ConnectionRepository;
 use Inertia\Inertia;
 use Inertia\Response;
+use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 
 class SettingsController extends Controller
 {
@@ -16,7 +20,7 @@ class SettingsController extends Controller
      * The settings page. Secrets never leave the backend: only has_* flags
      * and a masked hint are exposed (spec E/K).
      */
-    public function index(ConnectionRepository $connections, CapabilityResolver $capabilities): Response
+    public function index(ConnectionRepository $connections, CapabilityResolver $capabilities, SentMediaCleanup $cleanup): Response
     {
         $connection = $connections->current();
         $preferences = AppSetting::singleton();
@@ -30,8 +34,75 @@ class SettingsController extends Controller
                 'broadcast_batch_size' => $preferences->broadcast_batch_size,
                 'broadcast_batch_pause' => $preferences->broadcast_batch_pause,
             ],
+            'storage' => $this->storageProps($preferences, $cleanup),
             'timezones' => \DateTimeZone::listIdentifiers(),
         ]);
+    }
+
+    /**
+     * Everything the storage card shows: disk selection, cleanup schedule,
+     * a live eligible-now estimate, per-disk usage, and run history.
+     *
+     * @return array<string, mixed>
+     */
+    private function storageProps(AppSetting $preferences, SentMediaCleanup $cleanup): array
+    {
+        $eligible = $cleanup->eligibleQuery($preferences);
+
+        $diskUsage = MediaFile::query()
+            ->whereNull('purged_at')
+            ->selectRaw('disk, count(*) as files, coalesce(sum(size_bytes), 0) as bytes')
+            ->groupBy('disk')
+            ->orderBy('disk')
+            ->get()
+            ->map(fn ($row) => ['disk' => $row->disk, 'files' => (int) $row->files, 'bytes' => (int) $row->bytes])
+            ->values()
+            ->all();
+
+        $recentRuns = MediaCleanupRun::query()
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get()
+            ->map(fn (MediaCleanupRun $run) => [
+                'id' => $run->id,
+                'trigger' => $run->trigger,
+                'status' => $run->status,
+                'files_purged' => $run->files_purged,
+                'bytes_freed' => $run->bytes_freed,
+                'files_failed' => $run->files_failed,
+                'capped' => $run->capped,
+                'message' => $run->message,
+                'finished_at' => $run->finished_at?->toAtomString(),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'media_disk' => $preferences->media_disk,
+            'media_public_base_url' => $preferences->media_public_base_url,
+            'cleanup' => [
+                'enabled' => (bool) $preferences->media_cleanup_enabled,
+                'frequency' => $preferences->media_cleanup_frequency,
+                'day' => $preferences->media_cleanup_day,
+                'interval_days' => $preferences->media_cleanup_interval_days,
+                'retention_days' => (int) $preferences->media_cleanup_retention_days,
+                'include_terminal' => (bool) $preferences->media_cleanup_include_terminal,
+                'last_run_at' => $preferences->media_cleanup_last_run_at?->toAtomString(),
+                'next_run_at' => $preferences->media_cleanup_next_run_at?->toAtomString(),
+            ],
+            'estimate' => [
+                'files' => (clone $eligible)->count(),
+                'bytes' => (int) (clone $eligible)->sum('size_bytes'),
+            ],
+            'disk_usage' => $diskUsage,
+            'capabilities' => [
+                's3_adapter_installed' => class_exists(AwsS3V3Adapter::class),
+                's3_credentials_present' => filled(config('filesystems.disks.s3.key'))
+                    && filled(config('filesystems.disks.s3.secret'))
+                    && filled(config('filesystems.disks.s3.bucket')),
+            ],
+            'recent_runs' => $recentRuns,
+        ];
     }
 
     /**

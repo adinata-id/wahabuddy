@@ -46,7 +46,7 @@ type BroadcastDetail = {
     resumable: boolean;
     cancellable: boolean;
     counts: Record<string, number>;
-    media: { url: string; original_name: string } | null;
+    media: { url: string | null; original_name: string } | null;
     started_at_display: string | null;
     finished_at_display: string | null;
 };

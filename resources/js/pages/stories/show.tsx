@@ -267,7 +267,13 @@ export default function StoriesShow({
                                 </div>
                             ) : story.media ? (
                                 <div className="space-y-2">
-                                    {story.media.mime_type.startsWith(
+                                    {story.media.url === null ? (
+                                        <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                                            {story.media.original_name} — the
+                                            stored file was removed by
+                                            auto-cleanup.
+                                        </div>
+                                    ) : story.media.mime_type.startsWith(
                                         'image/',
                                     ) ? (
                                         <img

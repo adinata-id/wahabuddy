@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSetting;
 use App\Models\Broadcast;
 use App\Models\MediaFile;
 use App\Models\Story;
@@ -12,6 +13,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class MediaController extends Controller
 {
@@ -47,7 +49,7 @@ class MediaController extends Controller
             return $this->uploadFailure('file', 'Unsupported media type. Accepted: JPEG, PNG, WebP images and MP4 video that matches the WhatsApp format.');
         }
 
-        $diskName = (string) config('wahabuddy.media_disk', 'public');
+        $diskName = (string) AppSetting::singleton()->media_disk;
         $path = sprintf(
             'stories/%s/%s/%s.%s',
             now()->format('Y'),
@@ -56,7 +58,19 @@ class MediaController extends Controller
             self::ACCEPTED_MIME_EXTENSIONS[$mime],
         );
 
-        Storage::disk($diskName)->put($path, $file->getContent());
+        // Disks are configured with throw=false, so a failed write is only
+        // visible through the return value — surface it instead of silently
+        // creating a media row whose bytes never landed. Resolution itself
+        // can also throw (driver missing); that must be a friendly 422 too.
+        try {
+            $stored = Storage::disk($diskName)->put($path, $file->getContent());
+        } catch (\Throwable) {
+            $stored = false;
+        }
+
+        if ($stored === false) {
+            return $this->uploadFailure('file', 'Storing the upload failed on the configured disk. Check the storage settings and try again.');
+        }
 
         $media = MediaFile::create([
             'disk' => $diskName,
@@ -101,16 +115,23 @@ class MediaController extends Controller
     /**
      * Storage probe: write a tiny object, fetch it from the backend with a
      * short timeout, then always clean up (spec H.6). Backend reachability is
-     * NOT proof that the WAHA network can reach the URL.
+     * NOT proof that the WAHA network can reach the URL. An optional disk
+     * parameter probes S3 before the operator switches to it; a disk whose
+     * driver cannot even be resolved (adapter missing) reports unreachable.
      */
     public function testStorage(Request $request): JsonResponse
     {
-        $diskName = (string) config('wahabuddy.media_disk', 'public');
-        $disk = Storage::disk($diskName);
+        $validated = $request->validate([
+            'disk' => ['nullable', 'string', Rule::in(['public', 's3'])],
+        ]);
+
+        $diskName = $validated['disk'] ?? (string) AppSetting::singleton()->media_disk;
         $path = 'stories/probe-'.Str::uuid().'.txt';
         $url = null;
+        $disk = null;
 
         try {
+            $disk = Storage::disk($diskName);
             $disk->put($path, 'wahabuddy storage probe');
 
             $probe = new MediaFile([
@@ -130,7 +151,13 @@ class MediaController extends Controller
             $reachable = false;
             $status = null;
         } finally {
-            $disk->delete($path);
+            if ($disk !== null) {
+                try {
+                    $disk->delete($path);
+                } catch (\Throwable) {
+                    // Best effort cleanup; the probe object is tiny.
+                }
+            }
         }
 
         return response()->json([

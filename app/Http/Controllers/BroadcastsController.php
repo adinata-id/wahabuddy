@@ -78,7 +78,7 @@ class BroadcastsController extends Controller
     public function create(): Response
     {
         return Inertia::render('broadcasts/create', [
-            'recent_media' => MediaFile::orderByDesc('created_at')->limit(30)->get()
+            'recent_media' => MediaFile::whereNull('purged_at')->orderByDesc('created_at')->limit(30)->get()
                 ->map(fn (MediaFile $media) => [
                     'id' => $media->id,
                     'original_name' => $media->original_name,
@@ -125,7 +125,7 @@ class BroadcastsController extends Controller
                     'original_name' => $broadcast->mediaFile->original_name,
                 ] : null,
             ],
-            'recent_media' => MediaFile::orderByDesc('created_at')->limit(30)->get()
+            'recent_media' => MediaFile::whereNull('purged_at')->orderByDesc('created_at')->limit(30)->get()
                 ->map(fn (MediaFile $media) => [
                     'id' => $media->id,
                     'original_name' => $media->original_name,

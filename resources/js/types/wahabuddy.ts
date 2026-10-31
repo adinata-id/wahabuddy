@@ -33,6 +33,40 @@ export type AppPreferences = {
     broadcast_batch_pause: number;
 };
 
+export type MediaCleanupRunSummary = {
+    id: number;
+    trigger: string;
+    status: string;
+    files_purged: number;
+    bytes_freed: number;
+    files_failed: number;
+    capped: boolean;
+    message: string | null;
+    finished_at: string | null;
+};
+
+export type StorageSettings = {
+    media_disk: string;
+    media_public_base_url: string | null;
+    cleanup: {
+        enabled: boolean;
+        frequency: 'daily' | 'weekly' | 'monthly' | 'custom';
+        day: number | null;
+        interval_days: number | null;
+        retention_days: number;
+        include_terminal: boolean;
+        last_run_at: string | null;
+        next_run_at: string | null;
+    };
+    estimate: { files: number; bytes: number };
+    disk_usage: { disk: string; files: number; bytes: number }[];
+    capabilities: {
+        s3_adapter_installed: boolean;
+        s3_credentials_present: boolean;
+    };
+    recent_runs: MediaCleanupRunSummary[];
+};
+
 export type ConnectionCheckResult = {
     working: boolean;
     sessionStatus: string | null;
@@ -72,7 +106,8 @@ export type MediaFileItem = {
     original_name: string;
     mime_type: string;
     video_codec: string | null;
-    url: string;
+    /** Null once cleanup purged the stored object. */
+    url: string | null;
 };
 
 export type StoryMedia = {
@@ -80,7 +115,8 @@ export type StoryMedia = {
     original_name: string;
     mime_type: string;
     video_codec: string | null;
-    url: string;
+    /** Null once cleanup purged the stored object. */
+    url: string | null;
 };
 
 export type StoryListItem = {
