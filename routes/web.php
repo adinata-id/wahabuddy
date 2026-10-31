@@ -1,16 +1,20 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\Settings\ConnectionController;
 use App\Http\Controllers\Settings\PreferencesController;
 use App\Http\Controllers\Settings\SettingsController;
+use App\Http\Controllers\StoryActionsController;
 use App\Http\Controllers\StoryController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('scheduler/run', [DashboardController::class, 'runScheduler'])
+        ->middleware('throttle:5,1')->name('scheduler.run');
     Route::inertia('broadcasts', 'broadcasts/index')->name('broadcasts.index');
     Route::inertia('contacts', 'contacts/index')->name('contacts.index');
 
@@ -21,6 +25,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('stories/{story}/edit', [StoryController::class, 'edit'])->name('stories.edit');
     Route::put('stories/{story}', [StoryController::class, 'update'])->middleware('throttle:30,1')->name('stories.update');
     Route::delete('stories/{story}', [StoryController::class, 'destroy'])->middleware('throttle:30,1')->name('stories.destroy');
+
+    Route::post('stories/{story}/retry', [StoryActionsController::class, 'retry'])
+        ->middleware('throttle:20,1')->name('stories.retry');
+    Route::post('stories/{story}/resolve', [StoryActionsController::class, 'resolve'])
+        ->middleware('throttle:20,1')->name('stories.resolve');
+    Route::post('stories/{story}/cancel', [StoryActionsController::class, 'cancel'])
+        ->middleware('throttle:20,1')->name('stories.cancel');
+    Route::post('stories/{story}/delete-remote', [StoryActionsController::class, 'deleteRemote'])
+        ->middleware('throttle:10,1')->name('stories.delete-remote');
 
     Route::post('media', [MediaController::class, 'store'])->middleware('throttle:10,1')->name('media.store');
     Route::delete('media/{media}', [MediaController::class, 'destroy'])->middleware('throttle:20,1')->name('media.destroy');

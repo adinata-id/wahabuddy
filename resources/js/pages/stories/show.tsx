@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, RotateCcw, Trash, Trash2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import Heading from '@/components/heading';
 import { StatusBadge } from '@/components/status-badge';
@@ -11,6 +12,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import {
     Table,
@@ -20,9 +22,16 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { cancel as cancelRoute } from '@/routes/stories';
 import { destroy as destroyRoute } from '@/routes/stories';
 import { edit as editRoute } from '@/routes/stories';
 import storiesRoutes from '@/routes/stories';
+import {
+    deleteRemote as deleteRemoteRoute,
+    resolve as resolveRoute,
+    retry as retryRoute,
+} from '@/routes/stories';
 import type { Pagination, StoryDetail, StoryLogItem } from '@/types/wahabuddy';
 
 export default function StoriesShow({
@@ -33,6 +42,12 @@ export default function StoriesShow({
     logs: Pagination<StoryLogItem>;
 }) {
     const deleteForm = useForm({});
+    const actionForm = useForm({});
+    const [resolveOpen, setResolveOpen] = useState(false);
+    const resolveForm = useForm<{ decision: 'mark_sent' | 'retry'; note: string }>({
+        decision: 'mark_sent',
+        note: '',
+    });
 
     return (
         <>
@@ -51,7 +66,7 @@ export default function StoriesShow({
                             attempt(s)
                         </p>
                     </div>
-                    <div className="mb-8 flex gap-2">
+                    <div className="mb-8 flex flex-wrap gap-2">
                         {story.editable ? (
                             <Button asChild variant="secondary">
                                 <Link href={editRoute({ story: story.id })}>
@@ -59,6 +74,93 @@ export default function StoriesShow({
                                 </Link>
                             </Button>
                         ) : null}
+
+                        {['failed', 'failed_max', 'expired', 'canceled'].includes(
+                            story.status,
+                        ) ? (
+                            <Button
+                                variant="secondary"
+                                disabled={actionForm.processing}
+                                onClick={() =>
+                                    actionForm.post(
+                                        retryRoute.url({ story: story.id }),
+                                        {
+                                            onSuccess: () =>
+                                                toast.success(
+                                                    'New retry cycle opened.',
+                                                ),
+                                        },
+                                    )
+                                }
+                            >
+                                <RotateCcw className="size-4" /> Retry now
+                            </Button>
+                        ) : null}
+
+                        {['pending', 'failed', 'failed_max', 'expired'].includes(
+                            story.status,
+                        ) ? (
+                            <Button
+                                variant="ghost"
+                                disabled={actionForm.processing}
+                                onClick={() => {
+                                    if (
+                                        !window.confirm(
+                                            'Cancel this story? No further attempts will be made.',
+                                        )
+                                    ) {
+                                        return;
+                                    }
+                                    actionForm.post(
+                                        cancelRoute.url({ story: story.id }),
+                                        {
+                                            onSuccess: () =>
+                                                toast.success('Story canceled.'),
+                                        },
+                                    );
+                                }}
+                            >
+                                <XCircle className="size-4" /> Cancel
+                            </Button>
+                        ) : null}
+
+                        {story.status === 'unknown' ? (
+                            <Button
+                                variant="secondary"
+                                onClick={() => setResolveOpen((open) => !open)}
+                            >
+                                Resolve unknown…
+                            </Button>
+                        ) : null}
+
+                        {story.status === 'sent' && story.waha_key_id ? (
+                            <Button
+                                variant="ghost"
+                                disabled={actionForm.processing}
+                                onClick={() => {
+                                    if (
+                                        !window.confirm(
+                                            'Ask WAHA to delete this status from WhatsApp? This cannot be undone.',
+                                        )
+                                    ) {
+                                        return;
+                                    }
+                                    actionForm.post(
+                                        deleteRemoteRoute.url({ story: story.id }),
+                                        {
+                                            onSuccess: () =>
+                                                toast.success(
+                                                    'Remote deletion accepted.',
+                                                ),
+                                        },
+                                    );
+                                }}
+                            >
+                                <Trash className="size-4" /> Delete on
+                                WhatsApp
+                            </Button>
+                        ) : null}
+
                         {story.status !== 'sending' &&
                         story.status !== 'unknown' ? (
                             <Button
@@ -89,11 +191,85 @@ export default function StoriesShow({
                                 ) : (
                                     <Trash2 className="size-4" />
                                 )}
-                                Delete
+                                Delete record
                             </Button>
                         ) : null}
                     </div>
                 </div>
+
+                {resolveOpen && story.status === 'unknown' ? (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Resolve unknown outcome</CardTitle>
+                            <CardDescription>
+                                A timeout or lost worker means WAHA may already have
+                                posted this status. Marking it sent never invents a
+                                WAHA id; retrying acknowledges a possible duplicate.
+                                A note is mandatory and stored in the audit log.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <div className="flex flex-wrap gap-2">
+                                {(
+                                    ['mark_sent', 'retry'] as const
+                                ).map((option) => (
+                                    <Button
+                                        key={option}
+                                        type="button"
+                                        variant={
+                                            resolveForm.data.decision === option
+                                                ? 'default'
+                                                : 'outline'
+                                        }
+                                        size="sm"
+                                        onClick={() => resolveForm.setData('decision', option)}
+                                    >
+                                        {option === 'mark_sent'
+                                            ? 'It was sent (mark sent)'
+                                            : 'Resend (accept duplicate risk)'}
+                                    </Button>
+                                ))}
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="resolve-note">
+                                    Note (required, kept in the audit log)
+                                </Label>
+                                <Textarea
+                                    id="resolve-note"
+                                    value={resolveForm.data.note}
+                                    onChange={(event) =>
+                                        resolveForm.setData('note', event.target.value)
+                                    }
+                                    rows={2}
+                                    placeholder="e.g. Verified on the phone that the status was posted 09:02."
+                                />
+                            </div>
+                            <Button
+                                disabled={
+                                    resolveForm.processing ||
+                                    resolveForm.data.note.trim().length < 3
+                                }
+                                onClick={() =>
+                                    resolveForm.post(
+                                        resolveRoute.url({ story: story.id }),
+                                        {
+                                            onSuccess: () => {
+                                                setResolveOpen(false);
+                                                resolveForm.reset();
+                                                toast.success(
+                                                    'Outcome resolved and audited.',
+                                                );
+                                            },
+                                        },
+                                    )
+                                }
+                            >
+                                {resolveForm.processing && <Spinner />}
+                                Confirm resolution
+                            </Button>
+                        </CardContent>
+                    </Card>
+                ) : null}
 
                 <div className="grid gap-4 lg:grid-cols-2">
                     <Card>

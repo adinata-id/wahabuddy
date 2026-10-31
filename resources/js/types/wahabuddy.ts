@@ -114,6 +114,7 @@ export type StoryDetail = {
     last_error: string | null;
     sent_at: string | null;
     sent_at_display: string | null;
+    deleted_from_waha_at: string | null;
     editable: boolean;
     media: StoryMedia | null;
 };

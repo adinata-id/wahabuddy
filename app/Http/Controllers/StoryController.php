@@ -257,6 +257,7 @@ class StoryController extends Controller
             'last_error' => $story->last_error,
             'sent_at' => $story->sent_at?->toAtomString(),
             'sent_at_display' => $story->sent_at?->timezone($timezone)->format('Y-m-d H:i:s'),
+            'deleted_from_waha_at' => $story->deleted_from_waha_at?->toAtomString(),
             'editable' => $story->isEditable(),
             'media' => $file !== null ? [
                 'id' => $file->id,
