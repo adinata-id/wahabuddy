@@ -7,11 +7,14 @@ import {
     useReactTable,
     type ColumnDef,
 } from '@tanstack/react-table';
-import { Images, Plus } from 'lucide-react';
+import { Images, Plus, RotateCcw, Trash2, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -30,6 +33,8 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import storiesRoutes from '@/routes/stories';
+import { bulk as bulkRoute } from '@/routes/stories';
+import { postJson } from '@/lib/http';
 import type {
     Pagination,
     StoryFilters,
@@ -51,6 +56,69 @@ export default function StoriesIndex({
         from: filters.from ?? '',
         to: filters.to ?? '',
     });
+    const [selected, setSelected] = useState<number[]>([]);
+    const [running, setRunning] = useState<'cancel' | 'retry' | 'delete' | null>(null);
+
+    const pageIds = stories.data.map((story) => story.id);
+    const allOnPageSelected =
+        pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
+    const someOnPageSelected =
+        selected.length > 0 && !allOnPageSelected;
+
+    const toggleRow = (id: number, checked: boolean) => {
+        setSelected((current) =>
+            checked
+                ? [...current, id]
+                : current.filter((selectedId) => selectedId !== id),
+        );
+    };
+
+    const togglePage = () => {
+        setSelected((current) =>
+            allOnPageSelected
+                ? current.filter((id) => !pageIds.includes(id))
+                : [...new Set([...current, ...pageIds])],
+        );
+    };
+
+    const runBulk = async (action: 'cancel' | 'retry' | 'delete') => {
+        const verb =
+            action === 'cancel'
+                ? 'cancel'
+                : action === 'retry'
+                  ? 'retry'
+                  : 'delete';
+        const withSkipped =
+            action === 'delete'
+                ? ' Records still sending or in unknown state are kept.'
+                : ' Stories not eligible for this action are skipped.';
+
+        if (
+            !window.confirm(
+                `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${selected.length} selected stor${selected.length === 1 ? 'y' : 'ies'}?${withSkipped}`,
+            )
+        ) {
+            return;
+        }
+
+        setRunning(action);
+
+        try {
+            const result = await postJson<{
+                updated: number;
+                skipped: number;
+                summary: string;
+            }>(bulkRoute.url(), { action, ids: selected });
+
+            toast.success(result.summary);
+            setSelected([]);
+            router.reload({ only: ['stories'] });
+        } catch {
+            toast.error('The bulk action could not be completed.');
+        } finally {
+            setRunning(null);
+        }
+    };
 
     const applyFilters = () => {
         const query: Record<string, string> = {};
@@ -63,6 +131,32 @@ export default function StoriesIndex({
     };
 
     const columns = [
+        columnHelper.display({
+            id: 'select',
+            header: () => (
+                <Checkbox
+                    checked={
+                        allOnPageSelected
+                            ? true
+                            : someOnPageSelected
+                              ? 'indeterminate'
+                              : false
+                    }
+                    onCheckedChange={() => togglePage()}
+                    aria-label="Select all stories on this page"
+                />
+            ),
+            cell: ({ row }) => (
+                <Checkbox
+                    checked={selected.includes(row.original.id)}
+                    onCheckedChange={(checked) =>
+                        toggleRow(row.original.id, checked === true)
+                    }
+                    aria-label={`Select story ${row.original.id}`}
+                    onClick={(event) => event.stopPropagation()}
+                />
+            ),
+        }),
         columnHelper.display({
             id: 'preview',
             header: 'Preview',
@@ -256,6 +350,70 @@ export default function StoriesIndex({
                     </CardContent>
                 </Card>
 
+                {selected.length > 0 ? (
+                    <Card className="border-primary/30 bg-primary/5">
+                        <CardContent className="flex flex-wrap items-center gap-2 py-3">
+                            <span className="text-sm font-medium">
+                                {selected.length} selected
+                            </span>
+                            <span className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={running !== null}
+                                    onClick={() => void runBulk('cancel')}
+                                >
+                                    {running === 'cancel' ? (
+                                        <Spinner />
+                                    ) : (
+                                        <XCircle className="size-4" />
+                                    )}
+                                    Cancel selected
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    disabled={running !== null}
+                                    onClick={() => void runBulk('retry')}
+                                >
+                                    {running === 'retry' ? (
+                                        <Spinner />
+                                    ) : (
+                                        <RotateCcw className="size-4" />
+                                    )}
+                                    Retry selected
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-destructive"
+                                    disabled={running !== null}
+                                    onClick={() => void runBulk('delete')}
+                                >
+                                    {running === 'delete' ? (
+                                        <Spinner />
+                                    ) : (
+                                        <Trash2 className="size-4" />
+                                    )}
+                                    Delete selected
+                                </Button>
+                            </span>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="ml-auto"
+                                onClick={() => setSelected([])}
+                            >
+                                Clear selection
+                            </Button>
+                        </CardContent>
+                    </Card>
+                ) : null}
+
                 {stories.data.length === 0 ? (
                     <EmptyState
                         icon={Images}
@@ -297,8 +455,7 @@ export default function StoriesIndex({
                         </Table>
                         <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground">
                             <span>
-                                {stories.total} story
-                                {stories.total === 1 ? '' : 'ies'} · page{' '}
+                                {stories.total} {stories.total === 1 ? 'story' : 'stories'} · page{' '}
                                 {stories.current_page} of {stories.last_page}
                             </span>
                             <span className="flex gap-2">

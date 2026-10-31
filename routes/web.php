@@ -55,6 +55,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('stories/{story}/retry', [StoryActionsController::class, 'retry'])
         ->middleware('throttle:20,1')->name('stories.retry');
+    Route::post('stories/bulk', [StoryActionsController::class, 'bulk'])
+        ->middleware('throttle:20,1')->name('stories.bulk');
     Route::post('stories/{story}/resolve', [StoryActionsController::class, 'resolve'])
         ->middleware('throttle:20,1')->name('stories.resolve');
     Route::post('stories/{story}/cancel', [StoryActionsController::class, 'cancel'])

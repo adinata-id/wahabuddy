@@ -8,6 +8,7 @@ use App\Models\Story;
 use App\Services\Waha\ConnectionRepository;
 use App\Services\Waha\Exceptions\WahaRequestException;
 use App\Services\Waha\WahaClient;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -104,6 +105,85 @@ class StoryActionsController extends Controller
         ]);
 
         return back()->with('status', 'story-canceled');
+    }
+
+    /**
+     * Bulk status update over a selected set (spec J extension): cancel,
+     * retry, or delete local records. Eligibility matches the single actions
+     * exactly; ineligible rows are skipped and reported, never forced.
+     */
+    public function bulk(Request $request): JsonResponse|RedirectResponse
+    {
+        $validated = $request->validate([
+            'action' => ['required', 'in:cancel,retry,delete'],
+            'ids' => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['integer', 'distinct'],
+        ]);
+
+        $connection = app(ConnectionRepository::class);
+        $updated = 0;
+        $skipped = 0;
+
+        Story::query()
+            ->whereIn('id', $validated['ids'])
+            ->get()
+            ->each(function (Story $story) use ($validated, $connection, &$updated, &$skipped): void {
+                $eligible = match ($validated['action']) {
+                    'cancel' => in_array($story->status, [StoryStatus::Pending, StoryStatus::Failed, StoryStatus::FailedMax, StoryStatus::Expired], true),
+                    'retry' => in_array($story->status, [StoryStatus::Failed, StoryStatus::FailedMax, StoryStatus::Expired, StoryStatus::Canceled], true),
+                    'delete' => ! in_array($story->status, [StoryStatus::Sending, StoryStatus::Unknown], true),
+                    default => false,
+                };
+
+                if (! $eligible) {
+                    $skipped++;
+
+                    return;
+                }
+
+                if ($validated['action'] === 'delete') {
+                    $story->logs()->create([
+                        'event' => 'deleted_local',
+                        'message' => 'Local story record deleted (bulk action).',
+                    ]);
+                    $story->delete();
+                    $updated++;
+
+                    return;
+                }
+
+                $fields = $validated['action'] === 'cancel'
+                    ? ['status' => StoryStatus::Canceled, 'next_attempt_at' => null]
+                    : [
+                        'status' => StoryStatus::Pending,
+                        'attempts' => 0,
+                        'next_attempt_at' => null,
+                        'attempt_token' => null,
+                        'sending_started_at' => null,
+                        'last_error' => null,
+                        'last_error_code' => null,
+                        'connection_revision' => $connection->current()->revision,
+                    ];
+
+                $story->forceFill($fields);
+                $story->save();
+
+                $story->logs()->create([
+                    'event' => $validated['action'] === 'cancel' ? 'canceled' : 'retry_manual',
+                    'message' => $validated['action'] === 'cancel'
+                        ? 'Admin canceled the story (bulk action).'
+                        : 'Admin opened a new retry cycle (bulk action).',
+                ]);
+
+                $updated++;
+            });
+
+        $summary = ucfirst($validated['action'])." applied to {$updated} stor".($updated === 1 ? 'y' : 'ies')
+            .($skipped > 0 ? "; {$skipped} skipped (not eligible)." : '.');
+
+        return $request->expectsJson()
+            ? response()->json(['updated' => $updated, 'skipped' => $skipped, 'summary' => $summary])
+            : back()->with('status', 'stories-bulk')->with('bulk_summary', $summary);
     }
 
     /**
