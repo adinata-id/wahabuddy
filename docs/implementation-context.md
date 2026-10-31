@@ -94,3 +94,37 @@ The user requested lerd for local development. Conventions applied:
 - Known npm bug (npm/cli#4828) hit once: vite-plus native optional deps
   missing after installer run — fixed with `rm -rf node_modules && npm ci`
   (lockfile untouched).
+
+## Task 9 — packaging, CI, deployment (2026-10-31)
+
+### PHP baseline deviation
+
+The committed `composer.lock` resolves symfony/http-foundation v8.1.10, which
+requires PHP >= 8.4.1 — so the practical minimum is **PHP 8.4** (not 8.3 as
+the spec's soft target allowed). Dockerfile uses `php:8.4-*-alpine`, CI runs
+the matrix on 8.4 + 8.5, and README/deployment docs state the requirement.
+
+### Docker build notes
+
+- `resources/js/routes`, `resources/js/actions`, and `resources/js/wayfinder`
+  are gitignored build artifacts. A dedicated `routes` stage installs
+  composer deps and runs `wayfinder:generate --with-form`; the node stage
+  installs Alpine's php84 (plus the Laravel extension set) because the vite
+  wayfinder plugin itself re-runs `php artisan wayfinder:generate` during
+  `npm run build`.
+
+### Verified (podman compose, project `wahabuddy-ci`, torn down afterwards)
+
+- `podman compose build` succeeds end-to-end
+- `up -d`: db → init (migrations) → app healthy → worker/scheduler/web
+- `GET /up` → 200; login page renders WahaBuddy
+- `php artisan wahabuddy:admin` works inside the container
+- scheduler executes `waha:send-stories` every minute (schedule:work)
+- full stack restart: data persists (admin account intact), health returns
+
+### CI
+
+`.github/workflows/ci.yml`: frontend job (typecheck + `vp check` + build
+with npm cache) and a PHP matrix (8.4/8.5) on a MySQL 8.4 service —
+PHPStan, Pint --test, and `php artisan test` including the two-process
+integration suites. No live WAHA traffic anywhere.

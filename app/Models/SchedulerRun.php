@@ -4,11 +4,12 @@ namespace App\Models;
 
 use App\Enums\SchedulerRunStatus;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
- * @property \Illuminate\Support\Carbon $started_at
- * @property \Illuminate\Support\Carbon|null $finished_at
- * @property \App\Enums\SchedulerRunStatus $status
+ * @property Carbon $started_at
+ * @property Carbon|null $finished_at
+ * @property SchedulerRunStatus $status
  * @property int $processed_count
  * @property int $error_count
  * @property string|null $last_error
