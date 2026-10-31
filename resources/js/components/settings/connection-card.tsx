@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm, router } from '@inertiajs/react';
 import { HardDrive, PlugZap, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/confirm-dialog';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,10 @@ import { testStorage as testStorageRoute } from '@/routes/media';
 import { update as updateRoute } from '@/routes/settings/connection';
 import { clearApiKey as clearApiKeyRoute } from '@/routes/settings/connection';
 import { clearBasicAuth as clearBasicAuthRoute } from '@/routes/settings/connection';
-import type { ConnectionCheckResult, ConnectionSettings } from '@/types/wahabuddy';
+import type {
+    ConnectionCheckResult,
+    ConnectionSettings,
+} from '@/types/wahabuddy';
 
 type ConnectionForm = {
     base_url: string;
@@ -26,10 +30,18 @@ type ConnectionForm = {
     basic_password: string;
 };
 
-export function ConnectionCard({ connection }: { connection: ConnectionSettings }) {
+type PendingClear = { label: string; url: string; status: string };
+
+export function ConnectionCard({
+    connection,
+}: {
+    connection: ConnectionSettings;
+}) {
     const [check, setCheck] = useState<ConnectionCheckResult | null>(null);
     const [testing, setTesting] = useState(false);
     const [testingStorage, setTestingStorage] = useState(false);
+    const [clearing, setClearing] = useState<PendingClear | null>(null);
+    const [clearingBusy, setClearingBusy] = useState(false);
 
     const form = useForm<ConnectionForm>({
         base_url: connection.base_url ?? '',
@@ -73,9 +85,7 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
             }>(testStorageRoute.url());
 
             if (result.reachable) {
-                toast.success(
-                    'Storage probe passed (from this backend only).',
-                );
+                toast.success('Storage probe passed (from this backend only).');
             } else {
                 toast.error(
                     `Storage probe failed${result.status ? ` (HTTP ${result.status})` : ''}.`,
@@ -88,23 +98,8 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
         }
     };
 
-    const clearSecret = (
-        label: string,
-        url: string,
-        status: string,
-    ) => {
-        if (
-            !window.confirm(
-                `Remove the stored ${label}? This changes the send target and will hold pending work until confirmed.`,
-            )
-        ) {
-            return;
-        }
-
-        router.delete(url, {
-            preserveScroll: true,
-            onSuccess: () => toast.success(status),
-        });
+    const clearSecret = (label: string, url: string, status: string) => {
+        setClearing({ label, url, status });
     };
 
     return (
@@ -140,7 +135,9 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
                             id="base_url"
                             type="url"
                             value={form.data.base_url}
-                            onChange={(e) => form.setData('base_url', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('base_url', e.target.value)
+                            }
                             placeholder="http://waha.example.test"
                         />
                         <InputError message={form.errors.base_url} />
@@ -156,7 +153,9 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
                         <Input
                             id="session"
                             value={form.data.session}
-                            onChange={(e) => form.setData('session', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('session', e.target.value)
+                            }
                             placeholder="default"
                         />
                         <InputError message={form.errors.session} />
@@ -173,7 +172,9 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
                             type="password"
                             autoComplete="new-password"
                             value={form.data.api_key}
-                            onChange={(e) => form.setData('api_key', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('api_key', e.target.value)
+                            }
                             placeholder={
                                 connection.has_api_key
                                     ? `Stored (${connection.api_key_hint}). Leave blank to keep.`
@@ -209,7 +210,10 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
                                 id="basic_username"
                                 value={form.data.basic_username}
                                 onChange={(e) =>
-                                    form.setData('basic_username', e.target.value)
+                                    form.setData(
+                                        'basic_username',
+                                        e.target.value,
+                                    )
                                 }
                                 placeholder="Only for proxies guarding the API"
                             />
@@ -225,7 +229,10 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
                                 autoComplete="new-password"
                                 value={form.data.basic_password}
                                 onChange={(e) =>
-                                    form.setData('basic_password', e.target.value)
+                                    form.setData(
+                                        'basic_password',
+                                        e.target.value,
+                                    )
                                 }
                                 placeholder={
                                     connection.has_basic_password
@@ -305,6 +312,39 @@ export function ConnectionCard({ connection }: { connection: ConnectionSettings 
                         )}
                     </div>
                 )}
+
+                <ConfirmDialog
+                    open={clearing !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setClearing(null);
+                    }}
+                    title={`Remove the stored ${clearing?.label ?? ''}?`}
+                    description="This changes the send target and will hold pending work until the new target is confirmed."
+                    confirmLabel={`Remove ${clearing?.label ?? ''}`}
+                    destructive
+                    processing={clearingBusy}
+                    onConfirm={() => {
+                        if (!clearing) {
+                            return;
+                        }
+
+                        setClearingBusy(true);
+                        router.delete(clearing.url, {
+                            preserveScroll: true,
+                            onSuccess: () => {
+                                setClearing(null);
+                                toast.success(clearing.status);
+                            },
+                            onError: (errors) => {
+                                toast.error(
+                                    Object.values(errors)[0] ??
+                                        'The request could not be completed.',
+                                );
+                            },
+                            onFinish: () => setClearingBusy(false),
+                        });
+                    }}
+                />
             </CardContent>
         </Card>
     );
@@ -321,7 +361,9 @@ function TestResult({ check }: { check: ConnectionCheckResult }) {
                             : 'bg-red-500/15 text-red-700 dark:text-red-400'
                     }
                 >
-                    {check.working ? 'WORKING' : (check.sessionStatus ?? 'failed')}
+                    {check.working
+                        ? 'WORKING'
+                        : (check.sessionStatus ?? 'failed')}
                 </Badge>
                 {check.sessionName && <span>{check.sessionName}</span>}
                 {check.me?.chatId && (
@@ -354,7 +396,10 @@ function TestResult({ check }: { check: ConnectionCheckResult }) {
             </dl>
             {check.error && (
                 <p className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
-                    <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                    <ShieldAlert
+                        className="mt-0.5 size-3.5 shrink-0"
+                        aria-hidden
+                    />
                     {check.error}
                 </p>
             )}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Pause, Play, Users, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/confirm-dialog';
 import Heading from '@/components/heading';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -79,9 +80,14 @@ export default function BroadcastsShow({
     logs: LogRow[];
     filter_status: string | null;
 }) {
-    const actionForm = useForm({});
+    // The cancel endpoint reports rejections under the "broadcast" error key.
+    const actionForm = useForm<Record<string, string>>({});
+    const [confirmingCancel, setConfirmingCancel] = useState(false);
     const [resolveFor, setResolveFor] = useState<RecipientRow | null>(null);
-    const resolveForm = useForm<{ decision: 'mark_sent' | 'retry'; note: string }>({
+    const resolveForm = useForm<{
+        decision: 'mark_sent' | 'retry';
+        note: string;
+    }>({
         decision: 'mark_sent',
         note: '',
     });
@@ -156,7 +162,8 @@ export default function BroadcastsShow({
                                 variant="secondary"
                                 disabled={actionForm.processing}
                                 onClick={() =>
-                                    actionForm.post(broadcastsRoutes.pause.url({
+                                    actionForm.post(
+                                        broadcastsRoutes.pause.url({
                                             broadcast: broadcast.id,
                                         }),
                                         {
@@ -175,7 +182,8 @@ export default function BroadcastsShow({
                                 variant="secondary"
                                 disabled={actionForm.processing}
                                 onClick={() =>
-                                    actionForm.post(broadcastsRoutes.resume.url({
+                                    actionForm.post(
+                                        broadcastsRoutes.resume.url({
                                             broadcast: broadcast.id,
                                         }),
                                         {
@@ -194,23 +202,7 @@ export default function BroadcastsShow({
                                 variant="ghost"
                                 className="text-destructive"
                                 disabled={actionForm.processing}
-                                onClick={() => {
-                                    if (
-                                        !window.confirm(
-                                            'Cancel this campaign? Not-yet-started recipients will be canceled; in-flight sends may still complete.',
-                                        )
-                                    ) {
-                                        return;
-                                    }
-                                    actionForm.post(broadcastsRoutes.cancel.url({
-                                            broadcast: broadcast.id,
-                                        }),
-                                        {
-                                            onSuccess: () =>
-                                                toast.success('Canceled.'),
-                                        },
-                                    );
-                                }}
+                                onClick={() => setConfirmingCancel(true)}
                             >
                                 <XCircle className="size-4" /> Cancel
                             </Button>
@@ -229,7 +221,10 @@ export default function BroadcastsShow({
                     <CardContent className="flex flex-wrap gap-2 text-sm">
                         {(
                             [
-                                ['sent', 'text-emerald-600 dark:text-emerald-400'],
+                                [
+                                    'sent',
+                                    'text-emerald-600 dark:text-emerald-400',
+                                ],
                                 [
                                     'pending',
                                     'text-slate-600 dark:text-slate-300',
@@ -281,31 +276,31 @@ export default function BroadcastsShow({
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="flex flex-wrap gap-2">
-                                {(
-                                    ['mark_sent', 'retry'] as const
-                                ).map((option) => (
-                                    <Button
-                                        key={option}
-                                        type="button"
-                                        size="sm"
-                                        variant={
-                                            resolveForm.data.decision ===
-                                            option
-                                                ? 'default'
-                                                : 'outline'
-                                        }
-                                        onClick={() =>
-                                            resolveForm.setData(
-                                                'decision',
-                                                option,
-                                            )
-                                        }
-                                    >
-                                        {option === 'mark_sent'
-                                            ? 'It was sent'
-                                            : 'Resend (duplicate risk)'}
-                                    </Button>
-                                ))}
+                                {(['mark_sent', 'retry'] as const).map(
+                                    (option) => (
+                                        <Button
+                                            key={option}
+                                            type="button"
+                                            size="sm"
+                                            variant={
+                                                resolveForm.data.decision ===
+                                                option
+                                                    ? 'default'
+                                                    : 'outline'
+                                            }
+                                            onClick={() =>
+                                                resolveForm.setData(
+                                                    'decision',
+                                                    option,
+                                                )
+                                            }
+                                        >
+                                            {option === 'mark_sent'
+                                                ? 'It was sent'
+                                                : 'Resend (duplicate risk)'}
+                                        </Button>
+                                    ),
+                                )}
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="recipient-note">
@@ -331,10 +326,12 @@ export default function BroadcastsShow({
                                     }
                                     onClick={() =>
                                         resolveForm.post(
-                                            broadcastsRoutes.recipients.resolve.url({
-                                                broadcast: broadcast.id,
-                                                recipient: resolveFor.id,
-                                            }),
+                                            broadcastsRoutes.recipients.resolve.url(
+                                                {
+                                                    broadcast: broadcast.id,
+                                                    recipient: resolveFor.id,
+                                                },
+                                            ),
                                             {
                                                 onSuccess: () => {
                                                     setResolveFor(null);
@@ -494,6 +491,30 @@ export default function BroadcastsShow({
                         )}
                     </CardContent>
                 </Card>
+
+                <ConfirmDialog
+                    open={confirmingCancel}
+                    onOpenChange={setConfirmingCancel}
+                    title="Cancel this campaign?"
+                    description="Recipients that have not started yet will be canceled. In-flight sends may still complete."
+                    confirmLabel="Cancel campaign"
+                    destructive
+                    processing={actionForm.processing}
+                    error={actionForm.errors.broadcast ?? null}
+                    onConfirm={() =>
+                        actionForm.post(
+                            broadcastsRoutes.cancel.url({
+                                broadcast: broadcast.id,
+                            }),
+                            {
+                                onSuccess: () => {
+                                    setConfirmingCancel(false);
+                                    toast.success('Canceled.');
+                                },
+                            },
+                        )
+                    }
+                />
             </div>
         </>
     );
@@ -524,9 +545,13 @@ function DraftRecipientsCard({
     const [selected, setSelected] = useState<DraftRecipient[]>([]);
     const [search, setSearch] = useState('');
     const [pasted, setPasted] = useState('');
-    const queueForm = useForm<{ recipients: DraftRecipient[] }>({
-        recipients: [],
-    });
+    const [queueOpen, setQueueOpen] = useState(false);
+    const [queueSnapshot, setQueueSnapshot] = useState<DraftRecipient[]>([]);
+    // The queue endpoint reports rejections under "recipients" or "broadcast".
+    const queueForm = useForm<{
+        recipients: DraftRecipient[];
+        broadcast?: string;
+    }>({ recipients: [] });
 
     useEffect(() => {
         const controller = new AbortController();
@@ -547,7 +572,7 @@ function DraftRecipientsCard({
         .map((line) => line.trim())
         .filter((line) => line !== '')
         .map((line) => {
-            const match = /^\+?[\d\s()\-]{8,}$/.test(line)
+            const match = /^\+?[\d\s()-]{8,}$/.test(line)
                 ? line.replace(/\D/g, '') + '@c.us'
                 : line;
             const known = contacts.find((c) => c.chat_id === match);
@@ -563,19 +588,11 @@ function DraftRecipientsCard({
     const preview = (name: string | null) =>
         templateText.replaceAll('{name}', name?.trim() || 'there');
 
-    const queue = () => {
-        if (
-            !window.confirm(
-                `Queue this broadcast to ${allRecipients.length} recipient(s)? Sends are paced and can be paused.`,
-            )
-        ) {
-            return;
-        }
-
-        queueForm.setData('recipients', allRecipients);
-        queueForm.post(broadcastsRoutes.queue.url({ broadcast: broadcastId }), {
-            onSuccess: () => toast.success('Campaign queued.'),
-        });
+    // Snapshot the recipients when the dialog opens so later edits to the
+    // selection while it is open cannot change what gets queued.
+    const openQueueConfirm = () => {
+        setQueueSnapshot(allRecipients);
+        setQueueOpen(true);
     };
 
     return (
@@ -626,7 +643,8 @@ function DraftRecipientsCard({
                                                             ? [
                                                                   ...current,
                                                                   {
-                                                                      chat_id: contact.chat_id,
+                                                                      chat_id:
+                                                                          contact.chat_id,
                                                                       name: contact.name,
                                                                   },
                                                               ]
@@ -663,7 +681,9 @@ function DraftRecipientsCard({
                         rows={3}
                         value={pasted}
                         onChange={(event) => setPasted(event.target.value)}
-                        placeholder={'+62 811-1111-111\n628222222222\n120363…@g.us'}
+                        placeholder={
+                            '+62 811-1111-111\n628222222222\n120363…@g.us'
+                        }
                     />
                 </div>
 
@@ -695,12 +715,42 @@ function DraftRecipientsCard({
                 </div>
 
                 <Button
-                    onClick={queue}
-                    disabled={queueForm.processing || allRecipients.length === 0}
+                    onClick={openQueueConfirm}
+                    disabled={
+                        queueForm.processing || allRecipients.length === 0
+                    }
                 >
                     {queueForm.processing && <Spinner />}
                     Queue broadcast ({allRecipients.length})
                 </Button>
+
+                <ConfirmDialog
+                    open={queueOpen}
+                    onOpenChange={setQueueOpen}
+                    title={`Queue this broadcast to ${queueSnapshot.length} recipient(s)?`}
+                    description="Sends are paced and can be paused."
+                    confirmLabel="Queue broadcast"
+                    processing={queueForm.processing}
+                    error={
+                        queueForm.errors.recipients ??
+                        queueForm.errors.broadcast ??
+                        null
+                    }
+                    onConfirm={() => {
+                        queueForm.setData('recipients', queueSnapshot);
+                        queueForm.post(
+                            broadcastsRoutes.queue.url({
+                                broadcast: broadcastId,
+                            }),
+                            {
+                                onSuccess: () => {
+                                    setQueueOpen(false);
+                                    toast.success('Campaign queued.');
+                                },
+                            },
+                        );
+                    }}
+                />
             </CardContent>
         </Card>
     );

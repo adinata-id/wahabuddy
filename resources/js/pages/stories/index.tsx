@@ -7,8 +7,16 @@ import {
     useReactTable,
     type ColumnDef,
 } from '@tanstack/react-table';
-import { BadgeCheck, Images, Plus, RotateCcw, Trash2, XCircle } from 'lucide-react';
+import {
+    BadgeCheck,
+    Images,
+    Plus,
+    RotateCcw,
+    Trash2,
+    XCircle,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
 import { StatusBadge, statusLabel } from '@/components/status-badge';
@@ -34,7 +42,7 @@ import {
 } from '@/components/ui/table';
 import storiesRoutes from '@/routes/stories';
 import { bulk as bulkRoute } from '@/routes/stories';
-import { postJson } from '@/lib/http';
+import { JsonError, postJson } from '@/lib/http';
 import type {
     Pagination,
     StoryFilters,
@@ -71,12 +79,17 @@ export default function StoriesIndex({
     const [running, setRunning] = useState<
         'cancel' | 'retry' | 'delete' | 'set_status' | null
     >(null);
+    const [pendingBulk, setPendingBulk] = useState<{
+        action: 'cancel' | 'retry' | 'delete' | 'set_status';
+        ids: number[];
+        status: string;
+    } | null>(null);
+    const [bulkError, setBulkError] = useState<string | null>(null);
 
     const pageIds = stories.data.map((story) => story.id);
     const allOnPageSelected =
         pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
-    const someOnPageSelected =
-        selected.length > 0 && !allOnPageSelected;
+    const someOnPageSelected = selected.length > 0 && !allOnPageSelected;
 
     const toggleRow = (id: number, checked: boolean) => {
         setSelected((current) =>
@@ -94,20 +107,21 @@ export default function StoriesIndex({
         );
     };
 
-    const runBulk = async (
+    // Snapshot the selection when the dialog opens so changes made while it
+    // is open cannot alter what gets submitted.
+    const requestBulk = (
         action: 'cancel' | 'retry' | 'delete' | 'set_status',
     ) => {
-        const noun = `${selected.length} selected stor${selected.length === 1 ? 'y' : 'ies'}`;
-        const message =
-            action === 'set_status'
-                ? `Set the status of ${noun} to "${statusLabel(statusTarget)}"? Rows already in that status, currently sending, or unknown are skipped.`
-                : action === 'delete'
-                  ? `Delete ${noun}? Records still sending or in unknown state are kept.`
-                  : `${action === 'cancel' ? 'Cancel' : 'Retry'} ${noun}? Stories not eligible for this action are skipped.`;
+        setBulkError(null);
+        setPendingBulk({ action, ids: selected, status: statusTarget });
+    };
 
-        if (!window.confirm(message)) {
+    const executeBulk = async () => {
+        if (!pendingBulk) {
             return;
         }
+
+        const { action, ids, status } = pendingBulk;
 
         setRunning(action);
 
@@ -118,16 +132,31 @@ export default function StoriesIndex({
                 summary: string;
             }>(bulkRoute.url(), {
                 action,
-                ids: selected,
-                ...(action === 'set_status' ? { status: statusTarget } : {}),
+                ids,
+                ...(action === 'set_status' ? { status } : {}),
             });
 
             toast.success(result.summary);
+            setPendingBulk(null);
             setSelected([]);
             setStatusTarget('');
             router.reload({ only: ['stories'] });
-        } catch {
-            toast.error('The bulk action could not be completed.');
+        } catch (error) {
+            if (error instanceof JsonError) {
+                const payload = error.data as {
+                    message?: string;
+                    errors?: Record<string, string[]>;
+                } | null;
+
+                setBulkError(
+                    payload?.errors
+                        ? Object.values(payload.errors).flat().join(' ')
+                        : (payload?.message ??
+                              'The bulk action could not be completed.'),
+                );
+            } else {
+                setBulkError('The bulk action could not be completed.');
+            }
         } finally {
             setRunning(null);
         }
@@ -181,7 +210,7 @@ export default function StoriesIndex({
                         className="size-10 rounded-md border object-cover"
                     />
                 ) : (
-                    <span className="flex size-10 items-center justify-center rounded-md border text-xs uppercase text-muted-foreground">
+                    <span className="flex size-10 items-center justify-center rounded-md border text-xs text-muted-foreground uppercase">
                         {row.original.type === 'text' ? 'T' : row.original.type}
                     </span>
                 ),
@@ -375,7 +404,7 @@ export default function StoriesIndex({
                                     size="sm"
                                     variant="secondary"
                                     disabled={running !== null}
-                                    onClick={() => void runBulk('cancel')}
+                                    onClick={() => requestBulk('cancel')}
                                 >
                                     {running === 'cancel' ? (
                                         <Spinner />
@@ -389,7 +418,7 @@ export default function StoriesIndex({
                                     size="sm"
                                     variant="secondary"
                                     disabled={running !== null}
-                                    onClick={() => void runBulk('retry')}
+                                    onClick={() => requestBulk('retry')}
                                 >
                                     {running === 'retry' ? (
                                         <Spinner />
@@ -426,7 +455,7 @@ export default function StoriesIndex({
                                     disabled={
                                         running !== null || statusTarget === ''
                                     }
-                                    onClick={() => void runBulk('set_status')}
+                                    onClick={() => requestBulk('set_status')}
                                 >
                                     {running === 'set_status' ? (
                                         <Spinner />
@@ -441,7 +470,7 @@ export default function StoriesIndex({
                                     variant="ghost"
                                     className="text-destructive"
                                     disabled={running !== null}
-                                    onClick={() => void runBulk('delete')}
+                                    onClick={() => requestBulk('delete')}
                                 >
                                     {running === 'delete' ? (
                                         <Spinner />
@@ -463,6 +492,58 @@ export default function StoriesIndex({
                         </CardContent>
                     </Card>
                 ) : null}
+
+                <ConfirmDialog
+                    open={pendingBulk !== null}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setPendingBulk(null);
+                            setBulkError(null);
+                        }
+                    }}
+                    title={`${
+                        pendingBulk?.action === 'set_status'
+                            ? 'Set status of'
+                            : pendingBulk?.action === 'delete'
+                              ? 'Delete'
+                              : pendingBulk?.action === 'cancel'
+                                ? 'Cancel'
+                                : 'Retry'
+                    } ${pendingBulk?.ids.length ?? 0} selected stor${
+                        (pendingBulk?.ids.length ?? 0) === 1 ? 'y' : 'ies'
+                    }?`}
+                    description={
+                        pendingBulk?.action === 'set_status' ? (
+                            <>
+                                Rows already{' '}
+                                <StatusBadge status={pendingBulk.status} />,
+                                currently <StatusBadge status="sending" />, or{' '}
+                                <StatusBadge status="unknown" /> are skipped.
+                            </>
+                        ) : pendingBulk?.action === 'delete' ? (
+                            <>
+                                Records still <StatusBadge status="sending" />{' '}
+                                or in <StatusBadge status="unknown" /> state are
+                                kept.
+                            </>
+                        ) : (
+                            'Stories not eligible for this action are skipped.'
+                        )
+                    }
+                    confirmLabel={
+                        pendingBulk?.action === 'set_status'
+                            ? `Set to ${statusLabel(pendingBulk.status)}`
+                            : pendingBulk?.action === 'delete'
+                              ? 'Delete stories'
+                              : pendingBulk?.action === 'cancel'
+                                ? 'Cancel stories'
+                                : 'Retry stories'
+                    }
+                    destructive={pendingBulk?.action === 'delete'}
+                    processing={running !== null}
+                    error={bulkError}
+                    onConfirm={() => void executeBulk()}
+                />
 
                 {stories.data.length === 0 ? (
                     <EmptyState
@@ -505,8 +586,10 @@ export default function StoriesIndex({
                         </Table>
                         <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground">
                             <span>
-                                {stories.total} {stories.total === 1 ? 'story' : 'stories'} · page{' '}
-                                {stories.current_page} of {stories.last_page}
+                                {stories.total}{' '}
+                                {stories.total === 1 ? 'story' : 'stories'} ·
+                                page {stories.current_page} of{' '}
+                                {stories.last_page}
                             </span>
                             <span className="flex gap-2">
                                 <Button

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import { RefreshCcw, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/confirm-dialog';
 import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +49,7 @@ export default function Contacts({
     const consentForm = useForm<{ consent: 'in' | 'out' }>({ consent: 'in' });
     const syncForm = useForm({});
     const [syncing, setSyncing] = useState(false);
+    const [optOutFor, setOptOutFor] = useState<ContactRow | null>(null);
 
     const applyFilters = () => {
         const query: Record<string, string> = {};
@@ -73,9 +75,7 @@ export default function Contacts({
                 credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
-                    'X-XSRF-TOKEN': xsrf
-                        ? decodeURIComponent(xsrf)
-                        : '',
+                    'X-XSRF-TOKEN': xsrf ? decodeURIComponent(xsrf) : '',
                 },
             });
 
@@ -96,18 +96,15 @@ export default function Contacts({
 
     const setConsent = (contact: ContactRow, consent: 'in' | 'out') => {
         consentForm.setData('consent', consent);
-        consentForm.post(
-            contactsRoutes.consent.url({ contact: contact.id }),
-            {
-                preserveScroll: true,
-                onSuccess: () =>
-                    toast.success(
-                        consent === 'in'
-                            ? 'Opt-in recorded.'
-                            : 'Opt-out recorded; the contact will be excluded.',
-                    ),
-            },
-        );
+        consentForm.post(contactsRoutes.consent.url({ contact: contact.id }), {
+            preserveScroll: true,
+            onSuccess: () =>
+                toast.success(
+                    consent === 'in'
+                        ? 'Opt-in recorded.'
+                        : 'Opt-out recorded; the contact will be excluded.',
+                ),
+        });
     };
 
     return (
@@ -251,19 +248,9 @@ export default function Contacts({
                                                     disabled={
                                                         consentForm.processing
                                                     }
-                                                    onClick={() => {
-                                                        if (
-                                                            !window.confirm(
-                                                                'Record an opt-out? The contact will be excluded from all broadcasts.',
-                                                            )
-                                                        ) {
-                                                            return;
-                                                        }
-                                                        setConsent(
-                                                            contact,
-                                                            'out',
-                                                        );
-                                                    }}
+                                                    onClick={() =>
+                                                        setOptOutFor(contact)
+                                                    }
                                                 >
                                                     Opt out
                                                 </Button>
@@ -291,9 +278,9 @@ export default function Contacts({
                         </Table>
                         <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground">
                             <span>
-                                {contacts.total} ent{contacts.total === 1 ? 'ry' : 'ries'} · page{' '}
-                                {contacts.current_page} of{' '}
-                                {contacts.last_page}
+                                {contacts.total} ent
+                                {contacts.total === 1 ? 'ry' : 'ries'} · page{' '}
+                                {contacts.current_page} of {contacts.last_page}
                             </span>
                             <span className="flex gap-2">
                                 <Button
@@ -304,8 +291,7 @@ export default function Contacts({
                                         router.get(
                                             contactsRoutes.index(),
                                             {
-                                                page:
-                                                    contacts.current_page - 1,
+                                                page: contacts.current_page - 1,
                                             },
                                             { preserveState: true },
                                         )
@@ -324,8 +310,7 @@ export default function Contacts({
                                         router.get(
                                             contactsRoutes.index(),
                                             {
-                                                page:
-                                                    contacts.current_page + 1,
+                                                page: contacts.current_page + 1,
                                             },
                                             { preserveState: true },
                                         )
@@ -337,6 +322,42 @@ export default function Contacts({
                         </div>
                     </Card>
                 )}
+
+                <ConfirmDialog
+                    open={optOutFor !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setOptOutFor(null);
+                    }}
+                    title="Record an opt-out?"
+                    description={`${
+                        optOutFor?.name ?? optOutFor?.chat_id ?? 'This contact'
+                    } will be excluded from all broadcasts.`}
+                    confirmLabel="Record opt-out"
+                    destructive
+                    processing={consentForm.processing}
+                    error={consentForm.errors.consent ?? null}
+                    onConfirm={() => {
+                        if (!optOutFor) {
+                            return;
+                        }
+
+                        consentForm.setData('consent', 'out');
+                        consentForm.post(
+                            contactsRoutes.consent.url({
+                                contact: optOutFor.id,
+                            }),
+                            {
+                                preserveScroll: true,
+                                onSuccess: () => {
+                                    setOptOutFor(null);
+                                    toast.success(
+                                        'Opt-out recorded; the contact will be excluded.',
+                                    );
+                                },
+                            },
+                        );
+                    }}
+                />
             </div>
         </>
     );

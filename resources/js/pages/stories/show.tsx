@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { Pencil, RotateCcw, Trash, Trash2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/confirm-dialog';
 import Heading from '@/components/heading';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -41,10 +42,18 @@ export default function StoriesShow({
     story: StoryDetail;
     logs: Pagination<StoryLogItem>;
 }) {
-    const deleteForm = useForm({});
-    const actionForm = useForm({});
+    // Error bags from the server use the "story" key; type the forms so
+    // errors.story is visible to the confirmation dialog.
+    const deleteForm = useForm<Record<string, string>>({});
+    const actionForm = useForm<Record<string, string>>({});
+    const [confirming, setConfirming] = useState<
+        'cancel' | 'delete_remote' | 'delete_local' | null
+    >(null);
     const [resolveOpen, setResolveOpen] = useState(false);
-    const resolveForm = useForm<{ decision: 'mark_sent' | 'retry'; note: string }>({
+    const resolveForm = useForm<{
+        decision: 'mark_sent' | 'retry';
+        note: string;
+    }>({
         decision: 'mark_sent',
         note: '',
     });
@@ -75,9 +84,12 @@ export default function StoriesShow({
                             </Button>
                         ) : null}
 
-                        {['failed', 'failed_max', 'expired', 'canceled'].includes(
-                            story.status,
-                        ) ? (
+                        {[
+                            'failed',
+                            'failed_max',
+                            'expired',
+                            'canceled',
+                        ].includes(story.status) ? (
                             <Button
                                 variant="secondary"
                                 disabled={actionForm.processing}
@@ -97,28 +109,16 @@ export default function StoriesShow({
                             </Button>
                         ) : null}
 
-                        {['pending', 'failed', 'failed_max', 'expired'].includes(
-                            story.status,
-                        ) ? (
+                        {[
+                            'pending',
+                            'failed',
+                            'failed_max',
+                            'expired',
+                        ].includes(story.status) ? (
                             <Button
                                 variant="ghost"
                                 disabled={actionForm.processing}
-                                onClick={() => {
-                                    if (
-                                        !window.confirm(
-                                            'Cancel this story? No further attempts will be made.',
-                                        )
-                                    ) {
-                                        return;
-                                    }
-                                    actionForm.post(
-                                        cancelRoute.url({ story: story.id }),
-                                        {
-                                            onSuccess: () =>
-                                                toast.success('Story canceled.'),
-                                        },
-                                    );
-                                }}
+                                onClick={() => setConfirming('cancel')}
                             >
                                 <XCircle className="size-4" /> Cancel
                             </Button>
@@ -137,27 +137,9 @@ export default function StoriesShow({
                             <Button
                                 variant="ghost"
                                 disabled={actionForm.processing}
-                                onClick={() => {
-                                    if (
-                                        !window.confirm(
-                                            'Ask WAHA to delete this status from WhatsApp? This cannot be undone.',
-                                        )
-                                    ) {
-                                        return;
-                                    }
-                                    actionForm.post(
-                                        deleteRemoteRoute.url({ story: story.id }),
-                                        {
-                                            onSuccess: () =>
-                                                toast.success(
-                                                    'Remote deletion accepted.',
-                                                ),
-                                        },
-                                    );
-                                }}
+                                onClick={() => setConfirming('delete_remote')}
                             >
-                                <Trash className="size-4" /> Delete on
-                                WhatsApp
+                                <Trash className="size-4" /> Delete on WhatsApp
                             </Button>
                         ) : null}
 
@@ -167,24 +149,7 @@ export default function StoriesShow({
                                 variant="ghost"
                                 className="text-destructive"
                                 disabled={deleteForm.processing}
-                                onClick={() => {
-                                    if (
-                                        !window.confirm(
-                                            'Delete this local story record? Scheduled sends will stop. Remote deletion on WhatsApp is a separate action.',
-                                        )
-                                    ) {
-                                        return;
-                                    }
-                                    deleteForm.delete(
-                                        destroyRoute.url({ story: story.id }),
-                                        {
-                                            onSuccess: () =>
-                                                toast.success(
-                                                    'Story deleted.',
-                                                ),
-                                        },
-                                    );
-                                }}
+                                onClick={() => setConfirming('delete_local')}
                             >
                                 {deleteForm.processing ? (
                                     <Spinner />
@@ -202,33 +167,40 @@ export default function StoriesShow({
                         <CardHeader>
                             <CardTitle>Resolve unknown outcome</CardTitle>
                             <CardDescription>
-                                A timeout or lost worker means WAHA may already have
-                                posted this status. Marking it sent never invents a
-                                WAHA id; retrying acknowledges a possible duplicate.
-                                A note is mandatory and stored in the audit log.
+                                A timeout or lost worker means WAHA may already
+                                have posted this status. Marking it sent never
+                                invents a WAHA id; retrying acknowledges a
+                                possible duplicate. A note is mandatory and
+                                stored in the audit log.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="flex flex-wrap gap-2">
-                                {(
-                                    ['mark_sent', 'retry'] as const
-                                ).map((option) => (
-                                    <Button
-                                        key={option}
-                                        type="button"
-                                        variant={
-                                            resolveForm.data.decision === option
-                                                ? 'default'
-                                                : 'outline'
-                                        }
-                                        size="sm"
-                                        onClick={() => resolveForm.setData('decision', option)}
-                                    >
-                                        {option === 'mark_sent'
-                                            ? 'It was sent (mark sent)'
-                                            : 'Resend (accept duplicate risk)'}
-                                    </Button>
-                                ))}
+                                {(['mark_sent', 'retry'] as const).map(
+                                    (option) => (
+                                        <Button
+                                            key={option}
+                                            type="button"
+                                            variant={
+                                                resolveForm.data.decision ===
+                                                option
+                                                    ? 'default'
+                                                    : 'outline'
+                                            }
+                                            size="sm"
+                                            onClick={() =>
+                                                resolveForm.setData(
+                                                    'decision',
+                                                    option,
+                                                )
+                                            }
+                                        >
+                                            {option === 'mark_sent'
+                                                ? 'It was sent (mark sent)'
+                                                : 'Resend (accept duplicate risk)'}
+                                        </Button>
+                                    ),
+                                )}
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="resolve-note">
@@ -238,7 +210,10 @@ export default function StoriesShow({
                                     id="resolve-note"
                                     value={resolveForm.data.note}
                                     onChange={(event) =>
-                                        resolveForm.setData('note', event.target.value)
+                                        resolveForm.setData(
+                                            'note',
+                                            event.target.value,
+                                        )
                                     }
                                     rows={2}
                                     placeholder="e.g. Verified on the phone that the status was posted 09:02."
@@ -285,8 +260,7 @@ export default function StoriesShow({
                                 <div
                                     className="flex min-h-24 items-center justify-center rounded-lg p-4 text-center font-medium text-white"
                                     style={{
-                                        backgroundColor:
-                                            story.background_color,
+                                        backgroundColor: story.background_color,
                                     }}
                                 >
                                     {story.text}
@@ -330,7 +304,9 @@ export default function StoriesShow({
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt className="inline">Target revision: </dt>
+                                    <dt className="inline">
+                                        Target revision:{' '}
+                                    </dt>
                                     <dd className="inline">
                                         {story.connection_revision}
                                     </dd>
@@ -352,7 +328,9 @@ export default function StoriesShow({
                             {story.last_error ? (
                                 <p className="rounded-lg bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-400">
                                     {story.last_error_code ? (
-                                        <strong>{story.last_error_code}: </strong>
+                                        <strong>
+                                            {story.last_error_code}:{' '}
+                                        </strong>
                                     ) : null}
                                     {story.last_error}
                                 </p>
@@ -378,7 +356,7 @@ export default function StoriesShow({
                             <TableBody>
                                 {logs.data.map((log) => (
                                     <TableRow key={log.id}>
-                                        <TableCell className="whitespace-nowrap text-xs">
+                                        <TableCell className="text-xs whitespace-nowrap">
                                             {log.created_at_display}
                                         </TableCell>
                                         <TableCell>
@@ -395,6 +373,79 @@ export default function StoriesShow({
                         </Table>
                     </Card>
                 </div>
+
+                <ConfirmDialog
+                    open={confirming !== null}
+                    onOpenChange={(open) => {
+                        if (!open) setConfirming(null);
+                    }}
+                    title={
+                        confirming === 'cancel'
+                            ? 'Cancel this story?'
+                            : confirming === 'delete_remote'
+                              ? 'Delete this status on WhatsApp?'
+                              : 'Delete this story record?'
+                    }
+                    description={
+                        confirming === 'cancel'
+                            ? 'No further send attempts will be made.'
+                            : confirming === 'delete_remote'
+                              ? 'WAHA is asked to delete the status from the WhatsApp session. This cannot be undone.'
+                              : 'Scheduled sends stop. The status on WhatsApp is not touched — remote deletion is a separate action.'
+                    }
+                    confirmLabel={
+                        confirming === 'cancel'
+                            ? 'Cancel story'
+                            : confirming === 'delete_remote'
+                              ? 'Delete on WhatsApp'
+                              : 'Delete record'
+                    }
+                    destructive={
+                        confirming === 'delete_remote' ||
+                        confirming === 'delete_local'
+                    }
+                    processing={actionForm.processing || deleteForm.processing}
+                    error={
+                        (confirming === 'delete_local'
+                            ? deleteForm.errors.story
+                            : actionForm.errors.story) ?? null
+                    }
+                    onConfirm={() => {
+                        if (confirming === 'cancel') {
+                            actionForm.post(
+                                cancelRoute.url({ story: story.id }),
+                                {
+                                    onSuccess: () => {
+                                        setConfirming(null);
+                                        toast.success('Story canceled.');
+                                    },
+                                },
+                            );
+                        } else if (confirming === 'delete_remote') {
+                            actionForm.post(
+                                deleteRemoteRoute.url({ story: story.id }),
+                                {
+                                    onSuccess: () => {
+                                        setConfirming(null);
+                                        toast.success(
+                                            'Remote deletion accepted.',
+                                        );
+                                    },
+                                },
+                            );
+                        } else if (confirming === 'delete_local') {
+                            deleteForm.delete(
+                                destroyRoute.url({ story: story.id }),
+                                {
+                                    onSuccess: () => {
+                                        setConfirming(null);
+                                        toast.success('Story deleted.');
+                                    },
+                                },
+                            );
+                        }
+                    }}
+                />
             </div>
         </>
     );
