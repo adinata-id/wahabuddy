@@ -30,11 +30,19 @@ class AppSetting extends Model
 
     /**
      * The single settings row, created on first use with env-driven defaults.
+     * The instance is refreshed after creation so DB column defaults (pacing
+     * values) are visible without another query.
      */
     public static function singleton(): self
     {
-        return static::query()->first() ?? static::create([
+        $existing = static::query()->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        return static::create([
             'display_timezone' => config('wahabuddy.display_timezone', 'Asia/Jakarta'),
-        ]);
+        ])->refresh();
     }
 }

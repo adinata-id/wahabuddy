@@ -96,6 +96,22 @@ final class WahaClient
     }
 
     /**
+     * Contacts page with limit/offset pagination (spec D2/I).
+     *
+     * @return array<int, mixed>
+     */
+    public function listContactsOffset(ConnectionSnapshot $connection, int $limit, int $offset): array
+    {
+        $payload = $this->getJson($connection, '/api/contacts/all', [
+            'session' => $connection->session,
+            'limit' => (string) $limit,
+            'offset' => (string) $offset,
+        ]);
+
+        return is_array($payload) ? $payload : [];
+    }
+
+    /**
      * Chats/groups for the selected session (GET /api/{session}/chats).
      *
      * @return array<int, mixed>

@@ -10,6 +10,9 @@ Schedule::command('waha:send-stories')->everyMinute()->withoutOverlapping();
 // Stale `sending` rows become unknown (proof heals to sent) every 5 minutes.
 Schedule::command('waha:recover-stale-sends')->everyFiveMinutes()->withoutOverlapping();
 
+// Broadcast sweeper: campaigns that lost their follow-up job get re-queued.
+Schedule::command('waha:recover-broadcasts')->everyFiveMinutes()->withoutOverlapping();
+
 // Worker heartbeat so the dashboard can report queue-worker liveness.
 Schedule::job(new RecordWorkerHeartbeatJob)->everyFiveMinutes();
 

@@ -4,7 +4,17 @@ namespace App\Models;
 
 use App\Enums\ContactType;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int $connection_revision
+ * @property string $chat_id
+ * @property string|null $name
+ * @property ContactType $type
+ * @property Carbon|null $opted_in_at
+ * @property Carbon|null $opted_out_at
+ */
 class Contact extends Model
 {
     protected $fillable = [

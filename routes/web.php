@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ContactsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\Settings\ConnectionController;
@@ -16,7 +17,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('scheduler/run', [DashboardController::class, 'runScheduler'])
         ->middleware('throttle:5,1')->name('scheduler.run');
     Route::inertia('broadcasts', 'broadcasts/index')->name('broadcasts.index');
-    Route::inertia('contacts', 'contacts/index')->name('contacts.index');
+
+    Route::get('contacts', [ContactsController::class, 'index'])->name('contacts.index');
+    Route::post('contacts/sync', [ContactsController::class, 'sync'])
+        ->middleware('throttle:3,1')->name('contacts.sync');
+    Route::get('contacts/opted-in', [ContactsController::class, 'optedIn'])
+        ->name('contacts.opted-in');
+    Route::post('contacts/{contact}/consent', [ContactsController::class, 'setConsent'])
+        ->middleware('throttle:60,1')->name('contacts.consent');
 
     Route::get('stories', [StoryController::class, 'index'])->name('stories.index');
     Route::get('stories/create', [StoryController::class, 'create'])->name('stories.create');
