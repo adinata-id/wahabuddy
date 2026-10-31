@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BroadcastsController;
 use App\Http\Controllers\ContactsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MediaController;
@@ -16,7 +17,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('scheduler/run', [DashboardController::class, 'runScheduler'])
         ->middleware('throttle:5,1')->name('scheduler.run');
-    Route::inertia('broadcasts', 'broadcasts/index')->name('broadcasts.index');
+
+    Route::get('broadcasts', [BroadcastsController::class, 'index'])->name('broadcasts.index');
+    Route::get('broadcasts/create', [BroadcastsController::class, 'create'])->name('broadcasts.create');
+    Route::post('broadcasts', [BroadcastsController::class, 'store'])
+        ->middleware('throttle:20,1')->name('broadcasts.store');
+    Route::get('broadcasts/{broadcast}', [BroadcastsController::class, 'show'])->name('broadcasts.show');
+    Route::get('broadcasts/{broadcast}/edit', [BroadcastsController::class, 'edit'])->name('broadcasts.edit');
+    Route::put('broadcasts/{broadcast}', [BroadcastsController::class, 'update'])
+        ->middleware('throttle:20,1')->name('broadcasts.update');
+    Route::post('broadcasts/{broadcast}/queue', [BroadcastsController::class, 'queue'])
+        ->middleware('throttle:10,1')->name('broadcasts.queue');
+    Route::post('broadcasts/{broadcast}/pause', [BroadcastsController::class, 'pause'])
+        ->middleware('throttle:30,1')->name('broadcasts.pause');
+    Route::post('broadcasts/{broadcast}/resume', [BroadcastsController::class, 'resume'])
+        ->middleware('throttle:30,1')->name('broadcasts.resume');
+    Route::post('broadcasts/{broadcast}/cancel', [BroadcastsController::class, 'cancel'])
+        ->middleware('throttle:10,1')->name('broadcasts.cancel');
+    Route::post('broadcasts/{broadcast}/recipients/{recipient}/resolve', [BroadcastsController::class, 'resolveRecipient'])
+        ->middleware('throttle:30,1')->name('broadcasts.recipients.resolve');
 
     Route::get('contacts', [ContactsController::class, 'index'])->name('contacts.index');
     Route::post('contacts/sync', [ContactsController::class, 'sync'])

@@ -9,6 +9,7 @@ use App\Enums\BroadcastType;
 use App\Enums\RecipientStatus;
 use App\Enums\StoryStatus;
 use App\Models\Broadcast;
+use App\Models\BroadcastRecipient;
 use App\Models\Story;
 use App\Services\Media\MediaUrlResolver;
 use App\Services\Sending\SessionSendGate;
@@ -128,10 +129,14 @@ class ProcessBroadcastJob implements ShouldQueue
 
         if ($remaining === 0) {
             if ($broadcast->finished_at === null) {
-                $counts = $broadcast->recipients()
+                $summaryRows = $broadcast->recipients()
                     ->selectRaw('status, count(*) as total')
                     ->groupBy('status')
-                    ->pluck('total', 'status');
+                    ->get();
+
+                $summary = $summaryRows
+                    ->map(fn (BroadcastRecipient $row) => $row->status->value.':'.$row->getAttribute('total'))
+                    ->implode(' ');
 
                 $broadcast->forceFill([
                     'status' => BroadcastStatus::Completed,
@@ -140,7 +145,7 @@ class ProcessBroadcastJob implements ShouldQueue
 
                 $broadcast->logs()->create([
                     'event' => 'completed',
-                    'message' => 'Campaign finished. '.collect($counts)->map(fn ($total, $status) => $status.':'.$total)->implode(' '),
+                    'message' => "Campaign finished. {$summary}",
                 ]);
             }
 

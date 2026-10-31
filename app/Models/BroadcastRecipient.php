@@ -5,9 +5,24 @@ namespace App\Models;
 use App\Enums\RecipientStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
+ * @property int $id
+ * @property int $broadcast_id
+ * @property string $chat_id
+ * @property string|null $name
+ * @property string $rendered_text
  * @property RecipientStatus $status
+ * @property int $attempts
+ * @property string|null $attempt_token
+ * @property Carbon|null $sending_started_at
+ * @property Carbon|null $next_attempt_at
+ * @property string|null $waha_message_id
+ * @property string|null $waha_key_id
+ * @property string|null $last_error_code
+ * @property string|null $last_error
+ * @property Carbon|null $sent_at
  * @property Broadcast $broadcast
  */
 class BroadcastRecipient extends Model

@@ -58,12 +58,18 @@ final class RecipientInput
             return null;
         }
 
+        // Already-normalized contact ids pass through unchanged.
+        if (preg_match('/^[0-9]+@c\.us$/i', $entry) === 1) {
+            return ['chat_id' => strtolower($entry), 'type' => 'contact'];
+        }
+
         // Group ids pass through unchanged.
         if (preg_match('/^[0-9][0-9\-]*@g\.us$/i', $entry) === 1) {
             return ['chat_id' => $entry, 'type' => 'group'];
         }
 
-        // @lid identifiers: reject clearly instead of mis-parsing (spec I).
+        // @lid identifiers and emails: reject clearly instead of mis-parsing
+        // (spec I).
         if (str_contains($entry, '@')) {
             return null;
         }
