@@ -10,6 +10,9 @@ use DateTimeImmutable;
  */
 final readonly class ConnectionCheck
 {
+    /**
+     * @param  array<string, string>|null  $me
+     */
     public function __construct(
         public readonly bool $working,
         public readonly ?string $sessionStatus,

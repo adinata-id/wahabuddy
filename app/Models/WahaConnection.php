@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * Singleton row describing the one active WAHA connection of this installation.
@@ -10,6 +11,17 @@ use Illuminate\Database\Eloquent\Model;
  * Secrets (api_key, basic_password) use encrypted casts; they must never be
  * serialized to the browser — the settings UI only receives has_* flags plus a
  * masked hint.
+ *
+ * @property string|null $base_url
+ * @property string|null $api_key
+ * @property string|null $basic_username
+ * @property string|null $basic_password
+ * @property string $session
+ * @property int $revision
+ * @property array<string, mixed>|null $capabilities
+ * @property Carbon|null $last_test_at
+ * @property string|null $last_test_status
+ * @property string|null $last_test_error
  */
 class WahaConnection extends Model
 {

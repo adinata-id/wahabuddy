@@ -8,6 +8,7 @@ use App\Models\WahaConnection;
 use App\Services\Waha\CapabilityResolver;
 use App\Services\Waha\ConnectionRepository;
 use Inertia\Inertia;
+use Inertia\Response;
 
 class SettingsController extends Controller
 {
@@ -15,7 +16,7 @@ class SettingsController extends Controller
      * The settings page. Secrets never leave the backend: only has_* flags
      * and a masked hint are exposed (spec E/K).
      */
-    public function index(ConnectionRepository $connections, CapabilityResolver $capabilities)
+    public function index(ConnectionRepository $connections, CapabilityResolver $capabilities): Response
     {
         $connection = $connections->current();
         $preferences = AppSetting::singleton();

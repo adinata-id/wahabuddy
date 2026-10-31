@@ -43,12 +43,13 @@ final class CapabilityResolver
     ];
 
     /**
+     * @param  array<string, mixed>|null  $stored
      * @return array<string, array{state: string, source: string}>
      */
-    public function overview(?WahaConnection $connection = null): array
+    public function overview(?WahaConnection $connection = null, ?array $stored = null): array
     {
         $connection ??= app(ConnectionRepository::class)->current();
-        $stored = $connection->capabilities ?? [];
+        $stored ??= $connection->capabilities ?? [];
 
         $overview = [];
         foreach (self::DOCUMENTED_BASELINE as $key => [$state, $source]) {
@@ -56,11 +57,12 @@ final class CapabilityResolver
 
             if (is_array($override)
                 && isset($override['state'])
-                && ($case = Capability::tryFrom((string) $override['state'])) !== null
+                && is_string($override['state'])
+                && ($case = Capability::tryFrom($override['state'])) !== null
             ) {
                 $overview[$key] = [
                     'state' => $case->value,
-                    'source' => (string) ($override['source'] ?? 'admin'),
+                    'source' => is_string($override['source'] ?? null) ? $override['source'] : 'admin',
                 ];
 
                 continue;

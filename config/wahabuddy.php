@@ -24,6 +24,19 @@ return [
 
     /*
     |----------------------------------------------------------------------
+    | Optional initial import values (spec E)
+    |----------------------------------------------------------------------
+    | Only consumed by `php artisan wahabuddy:import-env`, never by runtime
+    | services: stored database settings always win for actual sends.
+    */
+    'import' => [
+        'base_url' => env('WAHA_BASE_URL'),
+        'api_key' => env('WAHA_API_KEY'),
+        'session' => env('WAHA_SESSION'),
+    ],
+
+    /*
+    |----------------------------------------------------------------------
     | HTTP behavior toward WAHA
     |----------------------------------------------------------------------
     | Send requests must never auto-retry (non-idempotent POSTs); read-only

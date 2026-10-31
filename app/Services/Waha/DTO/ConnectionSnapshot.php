@@ -11,6 +11,9 @@ namespace App\Services\Waha\DTO;
  */
 final readonly class ConnectionSnapshot
 {
+    /**
+     * @param  array<string, mixed>  $capabilities
+     */
     public function __construct(
         public readonly ?string $baseUrl,
         public readonly ?string $apiKey,

@@ -145,6 +145,10 @@ final class WahaUrl
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
             $long = ip2long($ip);
 
+            if ($long === false) {
+                return false;
+            }
+
             return self::ipv4InRange($long, '10.0.0.0', '10.255.255.255')
                 || self::ipv4InRange($long, '172.16.0.0', '172.31.255.255')
                 || self::ipv4InRange($long, '192.168.0.0', '192.168.255.255')

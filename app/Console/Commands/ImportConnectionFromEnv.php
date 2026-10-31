@@ -18,9 +18,9 @@ class ImportConnectionFromEnv extends Command
 
     public function handle(ConnectionRepository $connections): int
     {
-        $baseUrl = trim((string) env('WAHA_BASE_URL', ''));
-        $apiKey = trim((string) env('WAHA_API_KEY', ''));
-        $session = trim((string) env('WAHA_SESSION', ''));
+        $baseUrl = trim((string) config('wahabuddy.import.base_url', ''));
+        $apiKey = trim((string) config('wahabuddy.import.api_key', ''));
+        $session = trim((string) config('wahabuddy.import.session', ''));
 
         if ($baseUrl === '' && $apiKey === '' && $session === '') {
             $this->info('No WAHA_BASE_URL/WAHA_API_KEY/WAHA_SESSION values found in the environment; nothing to import.');
