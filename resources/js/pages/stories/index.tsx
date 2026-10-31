@@ -61,6 +61,69 @@ const SETTABLE_STATUSES = [
     'canceled',
 ] as const;
 
+const CANCEL_ELIGIBLE = ['pending', 'failed', 'failed_max', 'expired'];
+const RETRY_ELIGIBLE = ['failed', 'failed_max', 'expired', 'canceled'];
+
+type BulkAction = 'cancel' | 'retry' | 'delete' | 'set_status';
+type SkipReason = 'unknown' | 'sending' | 'already-target' | 'not-eligible';
+
+/**
+ * Mirrors the status rules in StoryActionsController::bulk() so the bulk
+ * dialog can warn about skips before the request instead of only reporting
+ * them afterwards. Media-purge rules stay server-side.
+ */
+function bulkSkipReason(
+    status: string,
+    action: BulkAction,
+    target: string,
+): SkipReason | null {
+    if (status === 'unknown') {
+        return 'unknown';
+    }
+
+    if (status === 'sending') {
+        return 'sending';
+    }
+
+    if (action === 'delete') {
+        return null;
+    }
+
+    if (action === 'set_status') {
+        return status === target ? 'already-target' : null;
+    }
+
+    const eligible = action === 'cancel' ? CANCEL_ELIGIBLE : RETRY_ELIGIBLE;
+
+    return eligible.includes(status) ? null : 'not-eligible';
+}
+
+function summarizeSkipReasons(
+    reasons: SkipReason[],
+    targetLabel: string | null,
+): string {
+    const counts = new Map<SkipReason, number>();
+
+    for (const reason of reasons) {
+        counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    }
+
+    return [...counts.entries()]
+        .map(([reason, count]) => {
+            const label =
+                reason === 'unknown'
+                    ? 'unknown (resolve from the story detail page)'
+                    : reason === 'sending'
+                      ? 'currently sending'
+                      : reason === 'already-target'
+                        ? `already ${targetLabel ?? 'in that status'}`
+                        : 'not eligible';
+
+            return `${count} ${label}`;
+        })
+        .join(', ');
+}
+
 export default function StoriesIndex({
     stories,
     filters,
@@ -80,11 +143,46 @@ export default function StoriesIndex({
         'cancel' | 'retry' | 'delete' | 'set_status' | null
     >(null);
     const [pendingBulk, setPendingBulk] = useState<{
-        action: 'cancel' | 'retry' | 'delete' | 'set_status';
+        action: BulkAction;
         ids: number[];
         status: string;
     } | null>(null);
     const [bulkError, setBulkError] = useState<string | null>(null);
+
+    // Pre-check the skip rules against the rows visible on this page so the
+    // dialog can warn before the request. Rows selected on other pages can
+    // only be judged by the server.
+    const visibleSelected = pendingBulk
+        ? stories.data.filter((story) => pendingBulk.ids.includes(story.id))
+        : [];
+    const notVisibleCount = pendingBulk
+        ? pendingBulk.ids.length - visibleSelected.length
+        : 0;
+    const skipReasons = visibleSelected
+        .map((story) =>
+            pendingBulk
+                ? bulkSkipReason(
+                      story.status,
+                      pendingBulk.action,
+                      pendingBulk.status,
+                  )
+                : null,
+        )
+        .filter((reason): reason is SkipReason => reason !== null);
+    const skipWarning =
+        skipReasons.length > 0
+            ? `${skipReasons.length} of ${visibleSelected.length} selected on this page will be skipped: ${summarizeSkipReasons(
+                  skipReasons,
+                  pendingBulk?.action === 'set_status'
+                      ? statusLabel(pendingBulk.status)
+                      : null,
+              )}.`
+            : null;
+    const nothingChanges =
+        pendingBulk !== null &&
+        visibleSelected.length > 0 &&
+        skipReasons.length === visibleSelected.length &&
+        notVisibleCount === 0;
 
     const pageIds = stories.data.map((story) => story.id);
     const allOnPageSelected =
@@ -541,7 +639,14 @@ export default function StoriesIndex({
                     }
                     destructive={pendingBulk?.action === 'delete'}
                     processing={running !== null}
-                    error={bulkError}
+                    confirmDisabled={nothingChanges}
+                    warning={skipWarning}
+                    error={
+                        bulkError ??
+                        (nothingChanges
+                            ? 'Nothing will change — every selected story will be skipped.'
+                            : null)
+                    }
                     onConfirm={() => void executeBulk()}
                 />
 

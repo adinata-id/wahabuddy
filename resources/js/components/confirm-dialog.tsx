@@ -28,6 +28,8 @@ export default function ConfirmDialog({
     cancelLabel = 'Cancel',
     destructive = false,
     processing = false,
+    confirmDisabled = false,
+    warning = null,
     error = null,
     onConfirm,
 }: {
@@ -39,6 +41,8 @@ export default function ConfirmDialog({
     cancelLabel?: string;
     destructive?: boolean;
     processing?: boolean;
+    confirmDisabled?: boolean;
+    warning?: ReactNode;
     error?: string | null;
     onConfirm: () => void;
 }) {
@@ -61,6 +65,11 @@ export default function ConfirmDialog({
                         </AlertDialogDescription>
                     ) : null}
                 </AlertDialogHeader>
+                {warning ? (
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                        {warning}
+                    </p>
+                ) : null}
                 {error ? (
                     <p className="text-sm font-medium text-destructive">
                         {error}
@@ -78,7 +87,7 @@ export default function ConfirmDialog({
                                 ? buttonVariants({ variant: 'destructive' })
                                 : undefined
                         }
-                        disabled={processing}
+                        disabled={processing || confirmDisabled}
                         onClick={(event) => {
                             // Prevent the dialog from closing so the caller
                             // controls when to dismiss (on success only).
