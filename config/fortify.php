@@ -161,7 +161,9 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // Public self-registration is intentionally disabled: WahaBuddy is a
+        // single-admin, self-hosted panel. The admin account is created via
+        // `php artisan wahabuddy:admin`.
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::twoFactorAuthentication([
