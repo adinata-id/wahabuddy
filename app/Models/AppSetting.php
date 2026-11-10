@@ -3,9 +3,26 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * Singleton row of operational preferences (one row per installation).
+ *
+ * @property string $display_timezone
+ * @property int $broadcast_delay_min
+ * @property int $broadcast_delay_max
+ * @property int $broadcast_batch_size
+ * @property int $broadcast_batch_pause
+ * @property string $media_disk
+ * @property string|null $media_public_base_url
+ * @property bool $media_cleanup_enabled
+ * @property string $media_cleanup_frequency
+ * @property int|null $media_cleanup_day
+ * @property int|null $media_cleanup_interval_days
+ * @property int $media_cleanup_retention_days
+ * @property bool $media_cleanup_include_terminal
+ * @property Carbon|null $media_cleanup_last_run_at
+ * @property Carbon|null $media_cleanup_next_run_at
  */
 class AppSetting extends Model
 {

@@ -53,14 +53,14 @@ class MediaCleanupRun extends Model
      */
     public static function pruneToLimit(): void
     {
-        $staleIds = static::query()
+        // MySQL forbids DELETE ... WHERE id NOT IN (SELECT ... FROM same table),
+        // so the keep-list is materialized first (at most MAX_ROWS ids).
+        $keepIds = static::query()
             ->orderByDesc('id')
-            ->pluck('id')
-            ->skip(self::MAX_ROWS);
+            ->limit(self::MAX_ROWS)
+            ->pluck('id');
 
-        if ($staleIds->isNotEmpty()) {
-            static::query()->whereIn('id', $staleIds->all())->delete();
-        }
+        static::query()->whereKeyNot($keepIds)->delete();
     }
 
     public static function start(string $trigger): self

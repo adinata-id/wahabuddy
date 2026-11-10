@@ -54,6 +54,7 @@ class SettingsController extends Controller
             ->selectRaw('disk, count(*) as files, coalesce(sum(size_bytes), 0) as bytes')
             ->groupBy('disk')
             ->orderBy('disk')
+            ->toBase()
             ->get()
             ->map(fn ($row) => ['disk' => $row->disk, 'files' => (int) $row->files, 'bytes' => (int) $row->bytes])
             ->values()
