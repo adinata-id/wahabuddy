@@ -156,8 +156,8 @@ integration suites. No live WAHA traffic anywhere.
 - CI matrix (PHP 8.4/8.5 on MySQL), PHPStan/Pint/tsc/build green; Docker
   Compose boot + admin + scheduler tick + restart persistence verified via
   podman and torn down.
-- Repository audited: no secrets, no private hosts (only the spec copy
-  mentions the research reference instance), no env/backup files tracked.
+- Repository audited: no secrets, no private hosts (the spec's research
+  reference instance is redacted to a placeholder), no env/backup files tracked.
 
 ### Commands run for the final gate
 

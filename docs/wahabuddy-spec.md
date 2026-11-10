@@ -75,7 +75,7 @@ Sumber resmi yang harus diperiksa:
 - shadcn: https://ui.shadcn.com/docs
 - R2: https://developers.cloudflare.com/r2/api/s3/api/
 
-Instance `https://waha.example.com/` adalah **referensi riset saja**, tidak boleh menjadi default aplikasi, fixture, seed, `.env.example`, atau syarat deployment. Pada pemeriksaan read-only 31 Oktober 2026, Swagger melaporkan WAHA `2026.10.1`, OpenAPI `3.1.0`. Halaman root adalah Swagger UI; schema ditemukan di `swagger-ui-init.js` pada objek `swaggerDoc`, sementara `/api-json` mengembalikan 404. Ini bukti kontrak yang dipublikasikan, **bukan** verifikasi semua endpoint saat runtime atau identifikasi engine session pengguna.
+Instance `https://waha.example.com/` adalah **referensi riset saja** (placeholder), tidak boleh menjadi default aplikasi, fixture, seed, `.env.example`, atau syarat deployment. Detail kontrak instance privat — versi, lokasi schema — disimpan di luar repository. Ini bukti kontrak yang dipublikasikan, **bukan** verifikasi semua endpoint saat runtime atau identifikasi engine session pengguna.
 
 Jangan mengasumsikan lokasi OpenAPI sama untuk semua instalasi. Temukan dari Swagger UI instance target. Utamakan kontrak versi target dan dokumentasi resmi yang sesuai. Jika berbeda, catat perbedaannya dan tambahkan fixture/test adapter; jangan melakukan fallback POST ke endpoint lain setelah kiriman mungkin sudah diterima.
 
