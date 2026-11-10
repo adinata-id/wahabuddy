@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Pause, Play, Users, XCircle } from 'lucide-react';
+import { Pause, Play, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/confirm-dialog';
-import Heading from '@/components/heading';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,7 +32,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import broadcastsRoutes from '@/routes/broadcasts';
-import type { MediaFileItem, Pagination } from '@/types/wahabuddy';
+import type { Pagination } from '@/types/wahabuddy';
 
 type BroadcastDetail = {
     id: number;

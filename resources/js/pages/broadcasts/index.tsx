@@ -4,7 +4,7 @@ import { EmptyState } from '@/components/empty-state';
 import Heading from '@/components/heading';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import {
     Table,
     TableBody,

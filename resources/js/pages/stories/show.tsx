@@ -3,7 +3,6 @@ import { Head, Link, useForm } from '@inertiajs/react';
 import { Pencil, RotateCcw, Trash, Trash2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/confirm-dialog';
-import Heading from '@/components/heading';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import {

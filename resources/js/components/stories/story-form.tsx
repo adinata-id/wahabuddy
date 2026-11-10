@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import { useForm } from '@inertiajs/react';
 import { ImagePlus, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,7 +16,6 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { postJson } from '@/lib/http';
 import { shortTimezoneLabel } from '@/lib/date';
 import { store as storeRoute } from '@/routes/stories';
 import { update as updateRoute } from '@/routes/stories';
@@ -39,7 +37,7 @@ type FormShape = {
     timezone: string;
 };
 
-export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
+export function StoryForm({ story, displayTimezone }: Props) {
     const [media, setMedia] = useState<MediaFileItem | null>(
         story?.media
             ? {

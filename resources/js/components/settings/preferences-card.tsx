@@ -1,7 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import {

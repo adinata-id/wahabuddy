@@ -3,7 +3,6 @@ import { useForm, router } from '@inertiajs/react';
 import { HardDrive, PlugZap, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/confirm-dialog';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

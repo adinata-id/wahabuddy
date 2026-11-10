@@ -47,7 +47,6 @@ export default function Contacts({
     const [search, setSearch] = useState(filters.search ?? '');
     const [type, setType] = useState(filters.type ?? 'all');
     const consentForm = useForm<{ consent: 'in' | 'out' }>({ consent: 'in' });
-    const syncForm = useForm({});
     const [syncing, setSyncing] = useState(false);
     const [optOutFor, setOptOutFor] = useState<ContactRow | null>(null);
 
