@@ -103,7 +103,11 @@ export default function Dashboard({
                             })
                         }
                     >
-                        {runForm.processing ? <Spinner /> : <Play className="size-4" />}
+                        {runForm.processing ? (
+                            <Spinner />
+                        ) : (
+                            <Play className="size-4" />
+                        )}
                         Run scheduler now
                     </Button>
                 </div>
@@ -111,15 +115,23 @@ export default function Dashboard({
                 {warning.unconfigured ? (
                     <WarningBanner>
                         The WAHA connection is not configured. Open{' '}
-                        <Link className="underline" href={settingsRoutes.index()}>
+                        <Link
+                            className="underline"
+                            href={settingsRoutes.index()}
+                        >
                             Settings
                         </Link>{' '}
-                        to connect your instance — nothing will be sent until then.
+                        to connect your instance — nothing will be sent until
+                        then.
                     </WarningBanner>
                 ) : warning.untested ? (
                     <WarningBanner>
-                        The last connection test did not pass. Sends are held until a{' '}
-                        <Link className="underline" href={settingsRoutes.index()}>
+                        The last connection test did not pass. Sends are held
+                        until a{' '}
+                        <Link
+                            className="underline"
+                            href={settingsRoutes.index()}
+                        >
                             successful connection test
                         </Link>
                         .
@@ -128,16 +140,17 @@ export default function Dashboard({
 
                 {warning.held_stories > 0 ? (
                     <WarningBanner>
-                        {warning.held_stories} scheduled item(s) target WAHA revision{' '}
-                        {warning.revision - 1} and are held until you confirm the new
-                        target (retry them from their detail page).
+                        {warning.held_stories} scheduled item(s) target WAHA
+                        revision {warning.revision - 1} and are held until you
+                        confirm the new target (retry them from their detail
+                        page).
                     </WarningBanner>
                 ) : null}
 
                 {worker.stale ? (
                     <WarningBanner>
-                        The queue worker heartbeat is stale — stories will not send
-                        until a worker runs{' '}
+                        The queue worker heartbeat is stale — stories will not
+                        send until a worker runs{' '}
                         <code className="rounded bg-muted px-1">
                             php artisan queue:work --tries=1 --timeout=180
                         </code>
@@ -161,7 +174,11 @@ export default function Dashboard({
                         icon={Clock}
                         label="Pending"
                         value={counts.pending}
-                        hint={counts.sending > 0 ? `${counts.sending} sending now` : undefined}
+                        hint={
+                            counts.sending > 0
+                                ? `${counts.sending} sending now`
+                                : undefined
+                        }
                     />
                     <StatTile
                         icon={CircleX}
@@ -179,8 +196,16 @@ export default function Dashboard({
                         value={counts.unknown}
                         hint="Needs manual resolution"
                     />
-                    <StatTile icon={Clock} label="Expired" value={counts.expired} />
-                    <StatTile icon={CircleX} label="Canceled" value={counts.canceled} />
+                    <StatTile
+                        icon={Clock}
+                        label="Expired"
+                        value={counts.expired}
+                    />
+                    <StatTile
+                        icon={CircleX}
+                        label="Canceled"
+                        value={counts.canceled}
+                    />
                     <Card>
                         <CardContent className="flex flex-col gap-1 py-4">
                             <span className="text-xs text-muted-foreground">
@@ -194,7 +219,8 @@ export default function Dashboard({
                                     ? `last run ${scheduler.last_run_at_display}`
                                     : 'no runs recorded'}
                             </span>
-                            {scheduler.status === 'failed' && scheduler.last_error ? (
+                            {scheduler.status === 'failed' &&
+                            scheduler.last_error ? (
                                 <span className="text-xs text-red-600 dark:text-red-400">
                                     {scheduler.last_error}
                                 </span>
@@ -227,7 +253,9 @@ export default function Dashboard({
                                 upcoming.map((item) => (
                                     <Link
                                         key={item.id}
-                                        href={storiesRoutes.show({ story: item.id })}
+                                        href={storiesRoutes.show({
+                                            story: item.id,
+                                        })}
                                         className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-accent"
                                     >
                                         <span className="flex min-w-0 items-center gap-2">
@@ -249,8 +277,8 @@ export default function Dashboard({
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <Activity className="size-4" aria-hidden /> Recent
-                                activity
+                                <Activity className="size-4" aria-hidden />{' '}
+                                Recent activity
                             </CardTitle>
                             <CardDescription>
                                 Latest story events across the installation
@@ -265,7 +293,9 @@ export default function Dashboard({
                                 activity.map((item) => (
                                     <Link
                                         key={item.id}
-                                        href={storiesRoutes.show({ story: item.story_id })}
+                                        href={storiesRoutes.show({
+                                            story: item.story_id,
+                                        })}
                                         className="flex items-start justify-between gap-3 rounded-lg px-1 py-1 text-sm hover:bg-accent"
                                     >
                                         <span className="min-w-0">
@@ -273,7 +303,8 @@ export default function Dashboard({
                                                 {item.event}
                                             </span>
                                             <span className="block truncate">
-                                                {item.message ?? `Story #${item.story_id}`}
+                                                {item.message ??
+                                                    `Story #${item.story_id}`}
                                             </span>
                                         </span>
                                         <span className="shrink-0 text-xs text-muted-foreground">
@@ -316,9 +347,13 @@ function StatTile({
                 <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Icon className="size-3.5" aria-hidden /> {label}
                 </span>
-                <span className="text-2xl font-semibold tabular-nums">{value}</span>
+                <span className="text-2xl font-semibold tabular-nums">
+                    {value}
+                </span>
                 {hint ? (
-                    <span className="text-xs text-muted-foreground">{hint}</span>
+                    <span className="text-xs text-muted-foreground">
+                        {hint}
+                    </span>
                 ) : null}
             </CardContent>
         </Card>

@@ -51,11 +51,7 @@ export default function BroadcastsCreate({
     );
 
     const preview = useMemo(
-        () =>
-            form.data.template_text.replaceAll(
-                '{name}',
-                'Andi',
-            ),
+        () => form.data.template_text.replaceAll('{name}', 'Andi'),
         [form.data.template_text],
     );
 
@@ -269,9 +265,7 @@ export default function BroadcastsCreate({
                                                                 item.id,
                                                             )}
                                                         >
-                                                            {
-                                                                item.original_name
-                                                            }
+                                                            {item.original_name}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>

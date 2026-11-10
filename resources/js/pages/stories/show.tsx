@@ -274,8 +274,8 @@ export default function StoriesShow({
                                             auto-cleanup.
                                         </div>
                                     ) : story.media.mime_type.startsWith(
-                                        'image/',
-                                    ) ? (
+                                          'image/',
+                                      ) ? (
                                         <img
                                             src={story.media.url}
                                             alt={story.media.original_name}

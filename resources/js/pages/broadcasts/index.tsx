@@ -99,14 +99,13 @@ export default function BroadcastsIndex({
                                             <span className="text-xs">
                                                 {broadcast.counts.sent} sent ·{' '}
                                                 {broadcast.counts.pending +
-                                                    broadcast.counts.sending}{' '}
+                                                    broadcast.counts
+                                                        .sending}{' '}
                                                 pending ·{' '}
-                                                {broadcast.counts.failed}{' '}
-                                                failed ·{' '}
-                                                {broadcast.counts.unknown}{' '}
+                                                {broadcast.counts.failed} failed
+                                                · {broadcast.counts.unknown}{' '}
                                                 unknown
-                                                {broadcast.counts.canceled >
-                                                0
+                                                {broadcast.counts.canceled > 0
                                                     ? ` · ${broadcast.counts.canceled} canceled`
                                                     : ''}
                                                 {' / '}
@@ -142,8 +141,7 @@ export default function BroadcastsIndex({
                                             broadcastsRoutes.index(),
                                             {
                                                 page:
-                                                    broadcasts.current_page -
-                                                    1,
+                                                    broadcasts.current_page - 1,
                                             },
                                             { preserveState: true },
                                         )
@@ -163,8 +161,7 @@ export default function BroadcastsIndex({
                                             broadcastsRoutes.index(),
                                             {
                                                 page:
-                                                    broadcasts.current_page +
-                                                    1,
+                                                    broadcasts.current_page + 1,
                                             },
                                             { preserveState: true },
                                         )

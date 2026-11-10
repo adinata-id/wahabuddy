@@ -47,7 +47,9 @@ export default function BroadcastsEdit({
         name: broadcast.name,
         type: broadcast.type,
         template_text: broadcast.template_text,
-        media_file_id: broadcast.media_file_id ? String(broadcast.media_file_id) : '',
+        media_file_id: broadcast.media_file_id
+            ? String(broadcast.media_file_id)
+            : '',
     });
 
     const [media, setMedia] = useState<MediaFileItem | null>(
@@ -70,11 +72,7 @@ export default function BroadcastsEdit({
     );
 
     const preview = useMemo(
-        () =>
-            form.data.template_text.replaceAll(
-                '{name}',
-                'Andi',
-            ),
+        () => form.data.template_text.replaceAll('{name}', 'Andi'),
         [form.data.template_text],
     );
 
@@ -297,9 +295,7 @@ export default function BroadcastsEdit({
                                                                 item.id,
                                                             )}
                                                         >
-                                                            {
-                                                                item.original_name
-                                                            }
+                                                            {item.original_name}
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>

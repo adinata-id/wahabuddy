@@ -41,9 +41,9 @@ export function PreferencesCard({
                     Preferences
                 </CardTitle>
                 <CardDescription>
-                    Display timezone affects presentation and new schedule
-                    input only; stored schedules stay in UTC. Pacing values are
-                    read fresh each time work is scheduled.
+                    Display timezone affects presentation and new schedule input
+                    only; stored schedules stay in UTC. Pacing values are read
+                    fresh each time work is scheduled.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -59,7 +59,9 @@ export function PreferencesCard({
                     className="space-y-4"
                 >
                     <div className="grid gap-2 md:max-w-sm">
-                        <Label htmlFor="display_timezone">Display timezone</Label>
+                        <Label htmlFor="display_timezone">
+                            Display timezone
+                        </Label>
                         <select
                             id="display_timezone"
                             value={form.data.display_timezone}

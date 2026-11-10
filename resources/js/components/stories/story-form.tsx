@@ -21,11 +21,7 @@ import { postJson } from '@/lib/http';
 import { shortTimezoneLabel } from '@/lib/date';
 import { store as storeRoute } from '@/routes/stories';
 import { update as updateRoute } from '@/routes/stories';
-import type {
-    MediaFileItem,
-    StoryDetail,
-    StoryType,
-} from '@/types/wahabuddy';
+import type { MediaFileItem, StoryDetail, StoryType } from '@/types/wahabuddy';
 
 type Props = {
     story?: StoryDetail | null;
@@ -129,11 +125,16 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
             text: data.text || null,
         }));
 
-        form.post(story ? updateRoute.url({ story: story.id }) : storeRoute.url(), {
-            preserveScroll: true,
-            onSuccess: () =>
-                toast.success(story ? 'Story updated.' : 'Story scheduled.'),
-        });
+        form.post(
+            story ? updateRoute.url({ story: story.id }) : storeRoute.url(),
+            {
+                preserveScroll: true,
+                onSuccess: () =>
+                    toast.success(
+                        story ? 'Story updated.' : 'Story scheduled.',
+                    ),
+            },
+        );
     };
 
     return (
@@ -153,9 +154,15 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="text">Text status</SelectItem>
-                                <SelectItem value="image">Image status</SelectItem>
-                                <SelectItem value="video">Video status</SelectItem>
+                                <SelectItem value="text">
+                                    Text status
+                                </SelectItem>
+                                <SelectItem value="image">
+                                    Image status
+                                </SelectItem>
+                                <SelectItem value="video">
+                                    Video status
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -170,7 +177,9 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
                         <Textarea
                             id="story-text"
                             value={form.data.text}
-                            onChange={(e) => form.setData('text', e.target.value)}
+                            onChange={(e) =>
+                                form.setData('text', e.target.value)
+                            }
                             rows={4}
                             maxLength={textLimit}
                             placeholder={
@@ -278,7 +287,9 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
                                 </Button>
                                 {media ? (
                                     <span className="flex items-center gap-2 text-sm">
-                                        {media.mime_type.startsWith('image/') ? (
+                                        {media.mime_type.startsWith(
+                                            'image/',
+                                        ) ? (
                                             <img
                                                 src={media.url ?? undefined}
                                                 alt={media.original_name}
@@ -295,8 +306,8 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
                                             {media.video_codec === null &&
                                             media.mime_type === 'video/mp4' ? (
                                                 <span className="block text-xs text-amber-600 dark:text-amber-400">
-                                                    codec unknown — ensure
-                                                    H.264 MP4
+                                                    codec unknown — ensure H.264
+                                                    MP4
                                                 </span>
                                             ) : null}
                                         </span>
@@ -309,10 +320,10 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
                             </div>
                             <InputError message={form.errors.media_file_id} />
                             <p className="text-xs text-muted-foreground">
-                                WAHA must be able to fetch this URL from its
-                                own network. Video must already match the
-                                WhatsApp format (H.264 MP4); conversion is not
-                                performed locally.
+                                WAHA must be able to fetch this URL from its own
+                                network. Video must already match the WhatsApp
+                                format (H.264 MP4); conversion is not performed
+                                locally.
                             </p>
                         </div>
                     )}
@@ -335,8 +346,8 @@ export function StoryForm({ story, recentMedia, displayTimezone }: Props) {
                             <InputError message={form.errors.scheduled_at} />
                             <p className="text-xs text-muted-foreground">
                                 Interpreted in{' '}
-                                <strong>{form.data.timezone}</strong>; stored
-                                as UTC.
+                                <strong>{form.data.timezone}</strong>; stored as
+                                UTC.
                             </p>
                         </div>
                         <div className="grid gap-2">

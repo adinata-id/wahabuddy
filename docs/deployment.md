@@ -24,13 +24,13 @@ Shared rules that apply to both paths:
 
 ### Prerequisites (tested versions)
 
-| Component | Version |
-|---|---|
-| PHP | 8.4+ (the committed lockfile requires PHP ≥ 8.4.1; tested on 8.4–8.5) with `pdo_mysql mbstring xml bcmath intl zip pcntl exif` |
-| Composer | 2.x |
-| Node + npm | 22.x (build step only) |
-| MySQL | 8.x |
-| Cron | any |
+| Component  | Version                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| PHP        | 8.4+ (the committed lockfile requires PHP ≥ 8.4.1; tested on 8.4–8.5) with `pdo_mysql mbstring xml bcmath intl zip pcntl exif` |
+| Composer   | 2.x                                                                                                                            |
+| Node + npm | 22.x (build step only)                                                                                                         |
+| MySQL      | 8.x                                                                                                                            |
+| Cron       | any                                                                                                                            |
 
 ### Install
 

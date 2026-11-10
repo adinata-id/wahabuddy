@@ -21,20 +21,20 @@ npm ci && npm run build && npm run typecheck
 
 ### Versions actually installed
 
-| Component | Version |
-|---|---|
-| PHP | 8.5.11 (host + lerd `php85-fpm`) |
-| Laravel framework | 13.39.0 |
-| Inertia (PHP) | inertiajs/inertia-laravel 3.6.0 |
-| React / TypeScript | React 19.2, TS 5.7 (starter kit) |
-| Tailwind CSS | 4.x via `@tailwindcss/vite` |
-| PHPUnit | 12.5.42 |
-| Laravel Boost | 2.10.4 (dev) |
-| Laravel Wayfinder | 0.1.23 (route/action TypeScript generation) |
-| Node / npm | v22.23.4 / 10.9.9 |
-| Frontend bundler | `vite` (aliased to `@voidzero-dev/vite-plus-core`), commands `vp build` / `vp dev` / `vp check` |
-| lerd | 1.37.0 (local dev: nginx + php-fpm 8.5 + MySQL + Mailpit, site `wahabuddy.test`) |
-| MySQL (lerd service) | 8.x container `lerd-mysql`, published on host `127.0.0.1:3306` |
+| Component            | Version                                                                                         |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| PHP                  | 8.5.11 (host + lerd `php85-fpm`)                                                                |
+| Laravel framework    | 13.39.0                                                                                         |
+| Inertia (PHP)        | inertiajs/inertia-laravel 3.6.0                                                                 |
+| React / TypeScript   | React 19.2, TS 5.7 (starter kit)                                                                |
+| Tailwind CSS         | 4.x via `@tailwindcss/vite`                                                                     |
+| PHPUnit              | 12.5.42                                                                                         |
+| Laravel Boost        | 2.10.4 (dev)                                                                                    |
+| Laravel Wayfinder    | 0.1.23 (route/action TypeScript generation)                                                     |
+| Node / npm           | v22.23.4 / 10.9.9                                                                               |
+| Frontend bundler     | `vite` (aliased to `@voidzero-dev/vite-plus-core`), commands `vp build` / `vp dev` / `vp check` |
+| lerd                 | 1.37.0 (local dev: nginx + php-fpm 8.5 + MySQL + Mailpit, site `wahabuddy.test`)                |
+| MySQL (lerd service) | 8.x container `lerd-mysql`, published on host `127.0.0.1:3306`                                  |
 
 ### Local development environment (lerd)
 

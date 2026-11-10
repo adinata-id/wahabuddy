@@ -18,7 +18,12 @@ export function EmptyState({
     return (
         <Card className={cn('border-dashed', className)}>
             <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                {Icon ? <Icon className="size-10 text-muted-foreground/60" aria-hidden /> : null}
+                {Icon ? (
+                    <Icon
+                        className="size-10 text-muted-foreground/60"
+                        aria-hidden
+                    />
+                ) : null}
                 <div className="space-y-1">
                     <p className="text-sm font-medium">{title}</p>
                     {description ? (

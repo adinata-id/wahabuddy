@@ -37,21 +37,21 @@ Bagian D–N adalah spesifikasi produk. Bagian O adalah rencana pelaksanaan atas
 
 ## C. Stack dan bootstrap yang konsisten
 
-| Bagian | Keputusan |
-|---|---|
-| Backend | Laravel 13.x, PHP 8.3+; konfirmasi constraint dependency terpasang sebelum bootstrap |
-| Frontend | Official Laravel React Starter Kit, React 19, TypeScript, Inertia.js versi kompatibel dari starter kit |
-| Inertia | Referensi starter kit saat revisi memakai Inertia 3; paket PHP dan React harus major yang sama |
-| UI | shadcn/ui + Tailwind CSS 4 + lucide-react + sonner |
-| Auth | Auth bawaan starter kit (Fortify), registrasi publik dinonaktifkan |
-| Form | Inertia form helpers sebagai default; FormRequest sebagai validasi otoritatif |
-| Tabel | TanStack Table dengan pola shadcn dan pagination server |
-| Database | SQLite default; MySQL 8+ didukung dengan migrasi yang sama |
-| Queue/cache | Database queue dan database cache/locks default; Redis opsional |
-| Media | Disk local public default; S3-compatible/R2 opsional |
-| Waktu | Persistensi UTC; timezone tampilan default Asia/Jakarta, dapat diubah |
-| SSR | Nonaktif; Node dibutuhkan untuk build, tidak perlu proses SSR di production |
-| Tes | PHPUnit bawaan starter kit; HTTP/Storage/Queue fake, tes waktu dan concurrency yang relevan |
+| Bagian      | Keputusan                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------ |
+| Backend     | Laravel 13.x, PHP 8.3+; konfirmasi constraint dependency terpasang sebelum bootstrap                   |
+| Frontend    | Official Laravel React Starter Kit, React 19, TypeScript, Inertia.js versi kompatibel dari starter kit |
+| Inertia     | Referensi starter kit saat revisi memakai Inertia 3; paket PHP dan React harus major yang sama         |
+| UI          | shadcn/ui + Tailwind CSS 4 + lucide-react + sonner                                                     |
+| Auth        | Auth bawaan starter kit (Fortify), registrasi publik dinonaktifkan                                     |
+| Form        | Inertia form helpers sebagai default; FormRequest sebagai validasi otoritatif                          |
+| Tabel       | TanStack Table dengan pola shadcn dan pagination server                                                |
+| Database    | SQLite default; MySQL 8+ didukung dengan migrasi yang sama                                             |
+| Queue/cache | Database queue dan database cache/locks default; Redis opsional                                        |
+| Media       | Disk local public default; S3-compatible/R2 opsional                                                   |
+| Waktu       | Persistensi UTC; timezone tampilan default Asia/Jakarta, dapat diubah                                  |
+| SSR         | Nonaktif; Node dibutuhkan untuk build, tidak perlu proses SSR di production                            |
+| Tes         | PHPUnit bawaan starter kit; HTTP/Storage/Queue fake, tes waktu dan concurrency yang relevan            |
 
 Gunakan official starter kit, **jangan** menjalankan Breeze installer lama lalu menambahkan starter kit lain. Pastikan alias `@/*` menuju `resources/js/*`. Jangan menjalankan `shadcn init` ulang jika starter kit sudah menyediakannya. Ikuti bundler/script resmi starter kit yang dipilih; jangan mengganti tooling hanya agar cocok dengan prompt lama.
 
@@ -92,28 +92,28 @@ Jangan mengasumsikan lokasi OpenAPI sama untuk semua instalasi. Temukan dari Swa
 
 ### D2. Endpoint yang dipakai v1
 
-| Aksi | Method dan path | Payload inti |
-|---|---|---|
-| Text story | POST `/api/{session}/status/text` | `text`, `backgroundColor`, `font` |
-| Image story | POST `/api/{session}/status/image` | `file: {mimetype, url}`, `caption` opsional |
-| Video story | POST `/api/{session}/status/video` | `file: {mimetype, filename, url}`, `caption` opsional, `convert` eksplisit |
-| Delete story | POST `/api/{session}/status/delete` | `id` menggunakan status message ID yang sesuai engine |
-| Broadcast text | POST `/api/sendText` | `session`, `chatId`, `text` |
-| Broadcast image | POST `/api/sendImage` | `session`, `chatId`, `file: {mimetype, url}`, `caption` |
-| Contacts | GET `/api/contacts/all?session={session}` | pagination mengikuti OpenAPI target |
-| Chats/groups | GET `/api/{session}/chats` | pagination mengikuti OpenAPI target; filter `@g.us` |
+| Aksi            | Method dan path                           | Payload inti                                                               |
+| --------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| Text story      | POST `/api/{session}/status/text`         | `text`, `backgroundColor`, `font`                                          |
+| Image story     | POST `/api/{session}/status/image`        | `file: {mimetype, url}`, `caption` opsional                                |
+| Video story     | POST `/api/{session}/status/video`        | `file: {mimetype, filename, url}`, `caption` opsional, `convert` eksplisit |
+| Delete story    | POST `/api/{session}/status/delete`       | `id` menggunakan status message ID yang sesuai engine                      |
+| Broadcast text  | POST `/api/sendText`                      | `session`, `chatId`, `text`                                                |
+| Broadcast image | POST `/api/sendImage`                     | `session`, `chatId`, `file: {mimetype, url}`, `caption`                    |
+| Contacts        | GET `/api/contacts/all?session={session}` | pagination mengikuti OpenAPI target                                        |
+| Chats/groups    | GET `/api/{session}/chats`                | pagination mengikuti OpenAPI target; filter `@g.us`                        |
 
 Contoh payload, nilai semuanya placeholder:
 
 ```json
 {
-  "file": {
-    "mimetype": "video/mp4",
-    "filename": "story.mp4",
-    "url": "https://media.example.com/stories/example.mp4"
-  },
-  "caption": "Example caption",
-  "convert": false
+    "file": {
+        "mimetype": "video/mp4",
+        "filename": "story.mp4",
+        "url": "https://media.example.com/stories/example.mp4"
+    },
+    "caption": "Example caption",
+    "convert": false
 }
 ```
 
@@ -165,19 +165,19 @@ AWS_USE_PATH_STYLE_ENDPOINT=false
 
 Gunakan migrasi portable, foreign keys, indeks, PHP backed enums dengan kolom string, dan timestamps UTC. `id` bigint default Laravel; UUID hanya untuk attempt token dan nama file. Kolom nullable ditulis `?` di bawah. Buat juga tabel bawaan users, jobs, failed_jobs, cache, cache_locks, sessions.
 
-| Tabel | Kolom domain selain id/created_at/updated_at |
-|---|---|
-| waha_connections | base_url?, api_key?, basic_username?, basic_password?, session, revision default 1, capabilities JSON?, last_test_at?, last_test_status?, last_test_error? |
-| app_settings | display_timezone default Asia/Jakarta, broadcast_delay_min default 8, broadcast_delay_max default 20, broadcast_batch_size default 50, broadcast_batch_pause default 60 |
-| media_files | disk, path, original_name, mime_type, size_bytes, video_codec?, created_by FK users |
-| stories | type image/video/text, media_file_id? FK, text?, background_color default #38b42f, font default 1, scheduled_at, status, attempts default 0, next_attempt_at?, sending_started_at?, attempt_token?, connection_revision, waha_message_id?, waha_key_id?, last_error_code?, last_error?, sent_at?, deleted_from_waha_at? |
-| story_logs | story_id FK, event, attempt_token?, message, context JSON?; append-only sampai retention |
-| contacts | connection_revision, chat_id, name?, type contact/group, opted_in_at?, opted_out_at? |
-| broadcasts | name, type text/image, media_file_id? FK, template_text, status, connection_revision, next_send_at?, batch_count default 0, started_at?, finished_at? |
-| broadcast_recipients | broadcast_id FK, chat_id, name?, rendered_text, status, attempts default 0, attempt_token?, sending_started_at?, next_attempt_at?, waha_message_id?, waha_key_id?, last_error_code?, last_error?, sent_at? |
-| broadcast_logs | broadcast_id FK, recipient_id? FK, event, message, context JSON? |
-| scheduler_runs | started_at, finished_at?, status running/succeeded/failed, processed_count default 0, error_count default 0, last_error? |
-| send_attempts | attempt_token UUID unique, subject_type story/recipient, subject_id, connection_revision, started_at, finished_at?, outcome started/sent/rejected/unknown, http_status?, message_id?, key_id?, error_code?, error? |
+| Tabel                | Kolom domain selain id/created_at/updated_at                                                                                                                                                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| waha_connections     | base_url?, api_key?, basic_username?, basic_password?, session, revision default 1, capabilities JSON?, last_test_at?, last_test_status?, last_test_error?                                                                                                                                                              |
+| app_settings         | display_timezone default Asia/Jakarta, broadcast_delay_min default 8, broadcast_delay_max default 20, broadcast_batch_size default 50, broadcast_batch_pause default 60                                                                                                                                                 |
+| media_files          | disk, path, original_name, mime_type, size_bytes, video_codec?, created_by FK users                                                                                                                                                                                                                                     |
+| stories              | type image/video/text, media_file_id? FK, text?, background_color default #38b42f, font default 1, scheduled_at, status, attempts default 0, next_attempt_at?, sending_started_at?, attempt_token?, connection_revision, waha_message_id?, waha_key_id?, last_error_code?, last_error?, sent_at?, deleted_from_waha_at? |
+| story_logs           | story_id FK, event, attempt_token?, message, context JSON?; append-only sampai retention                                                                                                                                                                                                                                |
+| contacts             | connection_revision, chat_id, name?, type contact/group, opted_in_at?, opted_out_at?                                                                                                                                                                                                                                    |
+| broadcasts           | name, type text/image, media_file_id? FK, template_text, status, connection_revision, next_send_at?, batch_count default 0, started_at?, finished_at?                                                                                                                                                                   |
+| broadcast_recipients | broadcast_id FK, chat_id, name?, rendered_text, status, attempts default 0, attempt_token?, sending_started_at?, next_attempt_at?, waha_message_id?, waha_key_id?, last_error_code?, last_error?, sent_at?                                                                                                              |
+| broadcast_logs       | broadcast_id FK, recipient_id? FK, event, message, context JSON?                                                                                                                                                                                                                                                        |
+| scheduler_runs       | started_at, finished_at?, status running/succeeded/failed, processed_count default 0, error_count default 0, last_error?                                                                                                                                                                                                |
+| send_attempts        | attempt_token UUID unique, subject_type story/recipient, subject_id, connection_revision, started_at, finished_at?, outcome started/sent/rejected/unknown, http_status?, message_id?, key_id?, error_code?, error?                                                                                                      |
 
 Indeks: stories `(status, scheduled_at)` dan `(status, next_attempt_at)`; recipients `(broadcast_id, status)`; broadcasts `(status, next_send_at)`; logs `(story_id, created_at)` atau `(broadcast_id, created_at)`; attempts `(subject_type, subject_id)`. Unique contacts `(connection_revision, chat_id)` dan recipients `(broadcast_id, chat_id)`.
 
@@ -249,15 +249,15 @@ failed_max -> pending          // admin membuka siklus retry baru, tercatat
 
 Layout responsive: sidebar Dashboard, Stories, Broadcasts, Contacts, Settings; top bar menampilkan connection status dan freshness, timezone, dark mode, user menu. Gunakan shadcn asli yang tersedia; `DataTable` adalah pola TanStack, bukan komponen paket terpisah, dan warna info/blue dibuat melalui class/token, bukan variant shadcn fiktif.
 
-| Halaman | Perilaku wajib |
-|---|---|
-| Dashboard | count stories today/sent month/pending/failed/unknown, jadwal terdekat, activity, scheduler/worker heartbeat dan error banner |
-| Stories | pagination, filter tanggal/status/type, thumbnail, caption excerpt, jadwal absolut + timezone, badge, last error, detail log |
+| Halaman           | Perilaku wajib                                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Dashboard         | count stories today/sent month/pending/failed/unknown, jadwal terdekat, activity, scheduler/worker heartbeat dan error banner                                                                          |
+| Stories           | pagination, filter tanggal/status/type, thumbnail, caption excerpt, jadwal absolut + timezone, badge, last error, detail log                                                                           |
 | Story Create/Edit | type text/image/video, upload/progress/preview, caption max 500 karakter; text story max 700 sebagai batas produk; color #RRGGBB dan font integer dari opsi terverifikasi; waktu dan timezone terlihat |
-| Story actions | edit/cancel yang valid, manual retry, resolve unknown dengan konfirmasi risiko dan audit; delete remote terpisah dari record lokal |
-| Broadcasts | wizard, preview, recipient counts, progress, pause/resume/cancel, list errors dan resolusi unknown |
-| Contacts | sync, pagination/search, type contact/group, opt-in/opt-out |
-| Settings | base URL, secret replacement, optional Basic auth, session list/manual, test unsaved config, save warning offline, capability, timezone, pacing, test storage |
+| Story actions     | edit/cancel yang valid, manual retry, resolve unknown dengan konfirmasi risiko dan audit; delete remote terpisah dari record lokal                                                                     |
+| Broadcasts        | wizard, preview, recipient counts, progress, pause/resume/cancel, list errors dan resolusi unknown                                                                                                     |
+| Contacts          | sync, pagination/search, type contact/group, opt-in/opt-out                                                                                                                                            |
+| Settings          | base URL, secret replacement, optional Basic auth, session list/manual, test unsaved config, save warning offline, capability, timezone, pacing, test storage                                          |
 
 Routes authenticated di `routes/web.php` dengan FormRequest dan policy/authorization. Mutasi biasa via Inertia; upload/test koneksi/poll boleh JSON menggunakan session auth dan CSRF. Tidak perlu Sanctum/public API v1. Contoh route: `/stories`, `/broadcasts`, `/contacts`, `/settings`, POST `/settings/test-connection`, POST `/settings/test-storage`, POST `/scheduler/run`, POST `/stories/{story}/retry`, POST `/stories/{story}/resolve`, POST `/stories/{story}/delete-remote`, POST `/broadcasts/{broadcast}/pause|resume|cancel` (buat tiga route konkret).
 
