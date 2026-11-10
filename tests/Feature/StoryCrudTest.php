@@ -6,6 +6,7 @@ use App\Enums\StoryStatus;
 use App\Models\MediaFile;
 use App\Models\Story;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -86,6 +87,9 @@ class StoryCrudTest extends TestCase
 
     public function test_stores_schedule_in_utc_and_renders_in_display_timezone(): void
     {
+        // Pin now before the hardcoded schedule dates so they stay in the future.
+        $this->travelTo(Carbon::parse('2026-10-15 12:00', 'UTC'));
+
         $this->actingAs($this->admin());
 
         $response = $this->post(route('stories.store'), [
@@ -114,6 +118,9 @@ class StoryCrudTest extends TestCase
 
     public function test_edit_is_limited_to_unsent_stories(): void
     {
+        // Pin now before the hardcoded schedule dates so they stay in the future.
+        $this->travelTo(Carbon::parse('2026-10-15 12:00', 'UTC'));
+
         $this->actingAs($this->admin());
 
         $sent = Story::create([
