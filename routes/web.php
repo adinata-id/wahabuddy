@@ -84,6 +84,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:5,1')->name('settings.storage.cleanup-run');
     Route::put('settings/storage', [StorageController::class, 'update'])
         ->middleware('throttle:10,1')->name('settings.storage.update');
+    Route::post('settings/storage/test', [StorageController::class, 'test'])
+        ->middleware('throttle:10,1')->name('settings.storage.test');
     Route::delete('settings/storage/secret', [StorageController::class, 'clearSecret'])
         ->middleware('throttle:6,1')->name('settings.storage.clear-secret');
 });

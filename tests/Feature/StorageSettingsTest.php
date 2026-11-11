@@ -8,8 +8,11 @@ use App\Models\MediaFile;
 use App\Models\S3Connection;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Media\MediaStorage;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use Tests\TestCase;
@@ -62,6 +65,25 @@ class StorageSettingsTest extends TestCase
         $story->forceFill(['updated_at' => now()->subDays(4)])->save();
 
         return $media;
+    }
+
+    /**
+     * Form payload for the storage probe endpoint (spec D2): possibly
+     * unsaved values exactly as the settings form submits them.
+     *
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    private function s3FormPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'key' => 'form-key',
+            'secret' => 'form-secret',
+            'bucket' => 'form-bucket',
+            'region' => 'auto',
+            'endpoint' => '',
+            'use_path_style_endpoint' => true,
+        ], $overrides);
     }
 
     public function test_save_updates_cleanup_settings_and_reschedules_next_run(): void
@@ -335,6 +357,35 @@ class StorageSettingsTest extends TestCase
         $this->assertNull(S3Connection::singleton()->refresh()->last_test_status);
     }
 
+    /**
+     * Recovering from unreadable ciphertext (APP_KEY rotation) must drop any
+     * stale test banner: the previous config was unknowable, so a surviving
+     * banner could describe entirely different credentials.
+     */
+    public function test_save_clears_stale_test_result_when_unreadable_credentials_become_readable(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+            'endpoint' => null, 'use_path_style_endpoint' => true,
+            'last_test_status' => 'passed', 'last_test_at' => now(),
+        ])->save();
+        // Simulate APP_KEY rotation: the stored ciphertext is now garbage.
+        DB::table('s3_connections')->update(['secret' => 'not-valid-ciphertext']);
+
+        $this->advanceThrottleWindow();
+        $this->put(route('settings.storage.update'), [
+            'enabled' => true, 'key' => 'k2', 'secret' => 'new-secret', 'bucket' => 'b2',
+            'region' => 'auto', 'endpoint' => '', 'use_path_style_endpoint' => true,
+        ])->assertRedirect();
+
+        $row = S3Connection::singleton()->refresh();
+        $this->assertNull($row->last_test_status);
+        $this->assertNull($row->last_test_at);
+    }
+
     public function test_clear_secret_endpoint_removes_only_the_secret(): void
     {
         $this->actingAs($this->admin());
@@ -346,6 +397,120 @@ class StorageSettingsTest extends TestCase
         $row = S3Connection::singleton()->refresh();
         $this->assertNull($row->secret);
         $this->assertSame('k', $row->key);
+    }
+
+    public function test_probe_reports_reachable_and_persists_when_matching_saved_config(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+        $this->swapMediaStorageWithFake();
+
+        // Saved row carries the SAME credentials the form submits (blank
+        // secret falls back to stored — spec D2).
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'form-key', 'secret' => 'form-secret', 'bucket' => 'form-bucket',
+            'endpoint' => null, 'use_path_style_endpoint' => true,
+        ])->save();
+
+        Http::fake(['*' => Http::response('wahabuddy storage probe', 200)]);
+        config(['filesystems.disks.public.url' => 'https://app.example.test/storage']);
+
+        $response = $this->postJson(route('settings.storage.test'), $this->s3FormPayload(['secret' => '']));
+
+        $response->assertOk()->assertJsonPath('reachable', true)->assertJsonPath('persisted', true);
+        $row = S3Connection::singleton()->refresh();
+        $this->assertSame('passed', $row->last_test_status);
+        $this->assertNotNull($row->last_test_at);
+    }
+
+    public function test_probe_does_not_persist_when_form_differs_from_saved_config(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+        $this->swapMediaStorageWithFake();
+
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'other-key', 'secret' => 'form-secret', 'bucket' => 'form-bucket',
+            'endpoint' => null, 'use_path_style_endpoint' => true,
+        ])->save();
+
+        Http::fake(['*' => Http::response('wahabuddy storage probe', 200)]);
+
+        $this->postJson(route('settings.storage.test'), $this->s3FormPayload())
+            ->assertOk()
+            ->assertJsonPath('reachable', true)
+            ->assertJsonPath('persisted', false);
+
+        $this->assertNull(S3Connection::singleton()->refresh()->last_test_status);
+    }
+
+    public function test_probe_reports_failure_with_static_message_without_leaking_the_host(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+        $this->swapMediaStorageWithFake();
+
+        // Saved config identical to the form → the FAILED result must also
+        // persist (hash-gated, not outcome-gated — spec 3.3 step 5).
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'form-key', 'secret' => 'form-secret', 'bucket' => 'form-bucket',
+            'endpoint' => 'https://secret-account.r2.cloudflarestorage.com', 'use_path_style_endpoint' => true,
+        ])->save();
+
+        Http::fake(['*' => Http::response('gateway unreachable', 502)]);
+
+        $response = $this->postJson(route('settings.storage.test'), $this->s3FormPayload([
+            'endpoint' => 'https://secret-account.r2.cloudflarestorage.com',
+        ]));
+
+        $response->assertOk()
+            ->assertJsonPath('reachable', false)
+            ->assertJsonPath('persisted', true)
+            ->assertJsonPath('note', fn ($note) => str_contains((string) $note, 'fetch_failed'));
+        $this->assertStringNotContainsString('cloudflarestorage', (string) $response->json('note'));
+
+        $row = S3Connection::singleton()->refresh();
+        $this->assertSame('failed', $row->last_test_status);
+        $this->assertSame('fetch_failed', $row->last_test_error, 'Stored error is a static code, never a raw message.');
+    }
+
+    public function test_probe_reports_write_failure_before_any_fetch(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+
+        $disk = $this->mock(FilesystemAdapter::class);
+        $disk->shouldReceive('put')->andReturn(false);
+        $disk->shouldReceive('delete')->andReturn(true);
+        $this->app->instance(
+            MediaStorage::class,
+            new MediaStorage(fn () => $disk),
+        );
+        Http::preventStrayRequests();
+
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'form-key', 'secret' => 'form-secret', 'bucket' => 'form-bucket',
+            'endpoint' => null, 'use_path_style_endpoint' => true,
+        ])->save();
+
+        $this->postJson(route('settings.storage.test'), $this->s3FormPayload(['secret' => '']))
+            ->assertOk()
+            ->assertJsonPath('reachable', false)
+            ->assertJsonPath('note', fn ($note) => str_contains((string) $note, 'write_failed'));
+    }
+
+    public function test_probe_tests_form_values_even_when_saved_row_is_disabled(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+        $this->swapMediaStorageWithFake();
+
+        // Saved row unusable — the probe must still test the FORM values.
+        Http::fake(['*' => Http::response('wahabuddy storage probe', 200)]);
+
+        $this->postJson(route('settings.storage.test'), $this->s3FormPayload())
+            ->assertOk()
+            ->assertJsonPath('reachable', true);
     }
 
     public function test_settings_page_exposes_connection_props_without_secrets(): void
