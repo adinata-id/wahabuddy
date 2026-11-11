@@ -82,6 +82,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:10,1')->name('settings.preferences.update');
     Route::post('settings/storage/cleanup-run', [StorageController::class, 'runCleanup'])
         ->middleware('throttle:5,1')->name('settings.storage.cleanup-run');
+    Route::put('settings/storage', [StorageController::class, 'update'])
+        ->middleware('throttle:10,1')->name('settings.storage.update');
+    Route::delete('settings/storage/secret', [StorageController::class, 'clearSecret'])
+        ->middleware('throttle:6,1')->name('settings.storage.clear-secret');
 });
 
 require __DIR__.'/settings.php';

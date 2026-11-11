@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\MediaCleanupRun;
 use App\Models\MediaFile;
+use App\Models\S3Connection;
 use App\Models\WahaConnection;
+use App\Services\Media\MediaStorage;
 use App\Services\Media\S3Availability;
 use App\Services\Media\SentMediaCleanup;
 use App\Services\Waha\CapabilityResolver;
 use App\Services\Waha\ConnectionRepository;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,7 +23,7 @@ class SettingsController extends Controller
      * The settings page. Secrets never leave the backend: only has_* flags
      * and a masked hint are exposed (spec E/K).
      */
-    public function index(ConnectionRepository $connections, CapabilityResolver $capabilities, SentMediaCleanup $cleanup): Response
+    public function index(ConnectionRepository $connections, CapabilityResolver $capabilities, SentMediaCleanup $cleanup, MediaStorage $storage): Response
     {
         $connection = $connections->current();
         $preferences = AppSetting::singleton();
@@ -34,7 +37,7 @@ class SettingsController extends Controller
                 'broadcast_batch_size' => $preferences->broadcast_batch_size,
                 'broadcast_batch_pause' => $preferences->broadcast_batch_pause,
             ],
-            'storage' => $this->storageProps($preferences, $cleanup),
+            'storage' => $this->storageProps($preferences, $cleanup, $storage),
             'timezones' => \DateTimeZone::listIdentifiers(),
         ]);
     }
@@ -45,7 +48,7 @@ class SettingsController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function storageProps(AppSetting $preferences, SentMediaCleanup $cleanup): array
+    private function storageProps(AppSetting $preferences, SentMediaCleanup $cleanup, MediaStorage $storage): array
     {
         $eligible = $cleanup->eligibleQuery($preferences);
 
@@ -79,6 +82,7 @@ class SettingsController extends Controller
             ->all();
 
         return [
+            'connection' => self::storageConnectionProps($storage->row(), $storage),
             'cleanup' => [
                 'enabled' => (bool) $preferences->media_cleanup_enabled,
                 'frequency' => $preferences->media_cleanup_frequency,
@@ -99,6 +103,45 @@ class SettingsController extends Controller
                 's3_credentials_present' => S3Availability::credentialsConfigured(),
             ],
             'recent_runs' => $recentRuns,
+        ];
+    }
+
+    /**
+     * Everything the S3/R2 connection form shows. Secrets never leave the
+     * backend: only has_* flags and a masked hint (mirror of connectionProps).
+     *
+     * @return array<string, mixed>
+     */
+    public static function storageConnectionProps(S3Connection $row, MediaStorage $storage): array
+    {
+        try {
+            $hasKey = filled($row->key);
+            $keyHint = $hasKey ? self::maskHint($row->key) : null;
+            $hasSecret = $row->secret !== null;
+            $unreadable = false;
+        } catch (DecryptException) {
+            $hasKey = false;
+            $keyHint = null;
+            $hasSecret = false;
+            $unreadable = true;
+        }
+
+        return [
+            'enabled' => (bool) $row->enabled,
+            'has_key' => $hasKey,
+            'has_secret' => $hasSecret,
+            'key_hint' => $keyHint,
+            'bucket' => $row->bucket,
+            'region' => $row->region ?? 'auto',
+            'endpoint' => $row->endpoint,
+            'use_path_style_endpoint' => (bool) $row->use_path_style_endpoint,
+            'configured' => $storage->configured(),
+            'credentials_unreadable' => $unreadable,
+            'last_test' => $row->last_test_at === null ? null : [
+                'at' => $row->last_test_at->toAtomString(),
+                'status' => $row->last_test_status,
+                'error' => $row->last_test_error,
+            ],
         ];
     }
 

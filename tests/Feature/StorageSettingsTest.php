@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Enums\StoryStatus;
 use App\Models\AppSetting;
 use App\Models\MediaFile;
+use App\Models\S3Connection;
 use App\Models\Story;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use Tests\TestCase;
@@ -236,5 +238,160 @@ class StorageSettingsTest extends TestCase
         $this->assertNotNull($next);
         $this->assertTrue($next->isFuture());
         $this->assertLessThan(2, $next->diffInDays(now()), 'A cadence change must not wait out the old interval.');
+    }
+
+    public function test_save_updates_s3_connection_settings(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+
+        $this->from(route('settings.index'))
+            ->put(route('settings.storage.update'), [
+                'enabled' => true,
+                'key' => 'AKIA-example',
+                'secret' => 'top-secret',
+                'bucket' => 'media-bucket',
+                'region' => 'auto',
+                'endpoint' => 'https://acct.r2.cloudflarestorage.com',
+                'use_path_style_endpoint' => true,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $row = S3Connection::singleton()->refresh();
+        $this->assertTrue($row->enabled);
+        $this->assertSame('AKIA-example', $row->key);
+        $this->assertSame('top-secret', $row->secret);
+        $this->assertSame('media-bucket', $row->bucket);
+        $this->assertSame('https://acct.r2.cloudflarestorage.com', $row->endpoint);
+    }
+
+    public function test_save_keeps_blank_secret_and_clears_blank_non_secret_fields(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+
+        S3Connection::singleton()->forceFill([
+            'key' => 'old-key', 'secret' => 'old-secret', 'bucket' => 'old-bucket',
+            'endpoint' => 'https://old.example.com', 'region' => 'us-east-1',
+        ])->save();
+
+        $this->put(route('settings.storage.update'), [
+            'enabled' => true,
+            'key' => '',
+            'secret' => '',
+            'bucket' => 'new-bucket',
+            'region' => '',
+            'endpoint' => '',
+            'use_path_style_endpoint' => false,
+        ])->assertRedirect();
+
+        $row = S3Connection::singleton()->refresh();
+        $this->assertSame('old-secret', $row->secret, 'Blank secret keeps the stored value.');
+        $this->assertNull($row->key, 'Blank key clears the stored value.');
+        $this->assertNull($row->endpoint, 'Blank endpoint clears the stored value.');
+        $this->assertSame('new-bucket', $row->bucket);
+        $this->assertSame('auto', $row->region, 'Blank region falls back to auto.');
+        $this->assertFalse((bool) $row->use_path_style_endpoint);
+    }
+
+    public function test_save_rejects_metadata_and_non_http_endpoints(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+
+        $this->put(route('settings.storage.update'), ['endpoint' => 'http://169.254.169.254/latest/meta-data'])
+            ->assertSessionHasErrors('endpoint');
+
+        $this->advanceThrottleWindow();
+        $this->put(route('settings.storage.update'), ['endpoint' => 'ftp://storage.example.com'])
+            ->assertSessionHasErrors('endpoint');
+    }
+
+    public function test_save_invalidates_stale_last_test_result(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+
+        S3Connection::singleton()->forceFill([
+            'key' => 'k', 'secret' => 's', 'bucket' => 'b', 'endpoint' => null,
+            'use_path_style_endpoint' => true,
+            'last_test_status' => 'passed', 'last_test_at' => now(),
+        ])->save();
+
+        // Same effective config → result survives.
+        $this->put(route('settings.storage.update'), [
+            'enabled' => true, 'key' => 'k', 'secret' => '', 'bucket' => 'b',
+            'region' => 'auto', 'endpoint' => '', 'use_path_style_endpoint' => true,
+        ])->assertRedirect();
+        $this->assertSame('passed', S3Connection::singleton()->refresh()->last_test_status);
+
+        // Changed config → result cleared.
+        $this->advanceThrottleWindow();
+        $this->put(route('settings.storage.update'), [
+            'enabled' => true, 'key' => 'k2', 'secret' => '', 'bucket' => 'b',
+            'region' => 'auto', 'endpoint' => '', 'use_path_style_endpoint' => true,
+        ])->assertRedirect();
+        $this->assertNull(S3Connection::singleton()->refresh()->last_test_status);
+    }
+
+    public function test_clear_secret_endpoint_removes_only_the_secret(): void
+    {
+        $this->actingAs($this->admin());
+
+        S3Connection::singleton()->forceFill(['key' => 'k', 'secret' => 's', 'bucket' => 'b'])->save();
+
+        $this->delete(route('settings.storage.clear-secret'))->assertRedirect();
+
+        $row = S3Connection::singleton()->refresh();
+        $this->assertNull($row->secret);
+        $this->assertSame('k', $row->key);
+    }
+
+    public function test_settings_page_exposes_connection_props_without_secrets(): void
+    {
+        $this->actingAs($this->admin());
+
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'AKIA-abcd1234', 'secret' => 'top-secret', 'bucket' => 'b',
+        ])->save();
+
+        $this->get(route('settings.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('storage.connection.enabled', true)
+                ->where('storage.connection.has_key', true)
+                ->where('storage.connection.has_secret', true)
+                ->where('storage.connection.configured', true)
+                ->where('storage.connection.credentials_unreadable', false)
+                ->where('storage.connection.key_hint', fn ($hint) => str_ends_with((string) $hint, '1234'))
+                ->where('storage.connection.bucket', 'b'));
+
+        $response = $this->get(route('settings.index'))->getContent();
+        $this->assertStringNotContainsString('top-secret', $response);
+        $this->assertStringNotContainsString('AKIA-abcd1234', $response);
+    }
+
+    public function test_settings_page_flags_unreadable_credentials(): void
+    {
+        $this->actingAs($this->admin());
+
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+        // Simulate APP_KEY rotation.
+        DB::table('s3_connections')->update(['secret' => 'not-valid-ciphertext']);
+
+        $this->get(route('settings.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('storage.connection.credentials_unreadable', true)
+                ->where('storage.connection.configured', false));
+    }
+
+    public function test_storage_routes_redirect_guests(): void
+    {
+        $this->put(route('settings.storage.update'), [])->assertRedirect('login');
+        $this->delete(route('settings.storage.clear-secret'))->assertRedirect('login');
     }
 }
