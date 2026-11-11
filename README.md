@@ -33,8 +33,10 @@ No SaaS, no billing, no public sign-up.
 - MySQL 8+
 - A running [WAHA](https://waha.devlike.pro/docs/how-to/installation/) with a
   paired session (WahaBuddy never creates or restarts sessions)
-- Optional: `ffprobe` for video codec detection, S3-compatible storage (R2)
-  for private media
+- S3-compatible storage (e.g. Cloudflare R2) for media: WAHA downloads
+  image/video files itself, so uploads are served as presigned URLs and
+  local-disk storage is not supported
+- Optional: `ffprobe` for video codec detection
 
 ## Quick start (native)
 
@@ -45,10 +47,10 @@ npm ci && npm run build
 
 cp .env.example .env
 php artisan key:generate --ansi     # FIRST INSTALLATION ONLY — keep APP_KEY stable
-# edit .env: APP_URL, DB_*, MEDIA_DISK
+# edit .env: APP_URL, DB_*, AWS_* (S3-compatible bucket — required for media upload)
 
 php artisan migrate --force
-php artisan storage:link
+php artisan storage:link            # only serves media left over from the removed local-disk mode
 php artisan wahabuddy:admin         # interactive; hidden password prompt
 
 # queue worker (systemd/supervisor in production):

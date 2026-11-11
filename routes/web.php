@@ -82,8 +82,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:10,1')->name('settings.preferences.update');
     Route::post('settings/storage/cleanup-run', [StorageController::class, 'runCleanup'])
         ->middleware('throttle:5,1')->name('settings.storage.cleanup-run');
-    Route::post('settings/storage/check-public-url', [StorageController::class, 'checkPublicUrl'])
-        ->middleware('throttle:5,1')->name('settings.storage.check-public-url');
 });
 
 require __DIR__.'/settings.php';

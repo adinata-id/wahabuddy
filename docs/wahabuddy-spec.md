@@ -48,7 +48,7 @@ Bagian D–N adalah spesifikasi produk. Bagian O adalah rencana pelaksanaan atas
 | Tabel       | TanStack Table dengan pola shadcn dan pagination server                                                |
 | Database    | SQLite default; MySQL 8+ didukung dengan migrasi yang sama                                             |
 | Queue/cache | Database queue dan database cache/locks default; Redis opsional                                        |
-| Media       | Disk local public default; S3-compatible/R2 opsional                                                   |
+| Media       | S3-only (S3-compatible/R2) dengan presigned URL; local disk tidak didukung                             |
 | Waktu       | Persistensi UTC; timezone tampilan default Asia/Jakarta, dapat diubah                                  |
 | SSR         | Nonaktif; Node dibutuhkan untuk build, tidak perlu proses SSR di production                            |
 | Tes         | PHPUnit bawaan starter kit; HTTP/Storage/Queue fake, tes waktu dan concurrency yang relevan            |
@@ -127,7 +127,7 @@ Contoh payload, nilai semuanya placeholder:
 
 Infrastructure ada di `.env`; pengaturan operasional WAHA ada di database dan dapat diubah lewat Settings tanpa rebuild.
 
-- `.env`: `APP_URL`, `APP_KEY`, database/cache/queue, timezone default, `MEDIA_DISK`, serta credentials storage opsional.
+- `.env`: `APP_URL`, `APP_KEY`, database/cache/queue, timezone default, serta credentials `AWS_*` (wajib untuk upload media).
 - DB singleton `waha_connections` menyimpan base URL, API key encrypted, optional Basic credentials encrypted, session, revision integer, capability metadata, dan hasil test terakhir yang sudah disanitasi.
 - DB singleton `app_settings` menyimpan display timezone, delay broadcast min/max, batch size dan pause. Satu baris per instalasi, bukan tabel “single-row key-value” yang kontradiktif.
 - Default koneksi kosong; session default `default` boleh sebagai saran, tetapi harus dipilih/divalidasi. Jangan isi host atau session privat.
@@ -151,7 +151,6 @@ DB_CONNECTION=sqlite
 QUEUE_CONNECTION=database
 CACHE_STORE=database
 SESSION_DRIVER=database
-MEDIA_DISK=public
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_DEFAULT_REGION=auto
@@ -221,9 +220,9 @@ failed_max -> pending          // admin membuka siklus retry baru, tercatat
 
 ## H. Media dan storage
 
-1. Default disk `public`, simpan `stories/YYYY/MM/{uuid}.{safe_extension}` melalui Laravel Storage; jalankan `storage:link`. WAHA harus bisa mengambil URL dari jaringan container/server WAHA. `localhost` dari container WAHA bukan alamat server aplikasi.
-2. Sediakan opsi `s3` untuk S3-compatible/R2 melalui `.env`. R2 memakai endpoint akun, region auto, serta public custom domain atau presigned GET URL. Jangan mengandalkan ACL `public-read` yang belum tentu didukung R2; akses publik dikonfigurasi pada bucket/domain.
-3. Presigned URL dibuat sesaat sebelum HTTP send, berlaku 15 menit, tidak disimpan/log. Jika memakai local public, jelaskan bahwa siapa pun yang mengetahui URL dapat mengambil media. Bucket private + signed URL merupakan opsi untuk kebutuhan privasi.
+1. Media storage S3-only: WAHA mengunduh media sendiri, jadi local disk (yang butuh base URL publik/tunnel) tidak didukung. Upload ditolak dengan pesan jelas selama bucket `AWS_*` belum dikonfigurasi. Simpan `stories/YYYY/MM/{uuid}.{safe_extension}` melalui Laravel Storage pada disk `s3`. File lama peninggalan mode local disk tetap bisa dipreview lewat URL app dan tetap dibersihkan cleanup, tetapi tidak bisa dikirim lagi — upload ulang.
+2. S3-compatible/R2 dikonfigurasi lewat `.env`. R2 memakai endpoint akun, region auto, serta presigned GET URL. Jangan mengandalkan ACL `public-read` yang belum tentu didukung R2; akses publik dikonfigurasi pada bucket/domain.
+3. Presigned URL dibuat sesaat sebelum HTTP send, berlaku 15 menit, tidak disimpan/log. Bucket private + signed URL menjaga privasi media.
 4. Maksimum 50 MiB (52.428.800 byte; Laravel max 51200 KiB), validasi ukuran serta MIME hasil deteksi server, bukan ekstensi dari browser. V1 menerima JPEG/PNG/WebP image serta MP4 video yang memenuhi format bagian D2. Format lain ditolak dengan pesan yang jelas; tidak perlu transcode lokal.
 5. Media upload boleh langsung sebelum story dibuat; bersihkan orphan berumur >24 jam hanya jika tidak direferensikan story/campaign. Media yang dipakai unknown/sending tidak boleh dihapus.
 6. Tombol Test Storage membuat object sementara, memeriksa URL dari backend dengan timeout singkat, lalu menghapusnya di finally. Jelaskan bahwa backend fetch sukses belum membuktikan reachability dari jaringan WAHA; uji end-to-end tetap diperlukan.

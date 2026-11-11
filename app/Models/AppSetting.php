@@ -13,8 +13,6 @@ use Illuminate\Support\Carbon;
  * @property int $broadcast_delay_max
  * @property int $broadcast_batch_size
  * @property int $broadcast_batch_pause
- * @property string $media_disk
- * @property string|null $media_public_base_url
  * @property bool $media_cleanup_enabled
  * @property string $media_cleanup_frequency
  * @property int|null $media_cleanup_day
@@ -32,8 +30,6 @@ class AppSetting extends Model
         'broadcast_delay_max',
         'broadcast_batch_size',
         'broadcast_batch_pause',
-        'media_disk',
-        'media_public_base_url',
         'media_cleanup_enabled',
         'media_cleanup_frequency',
         'media_cleanup_day',
@@ -77,9 +73,6 @@ class AppSetting extends Model
 
         return static::create([
             'display_timezone' => config('wahabuddy.display_timezone', 'Asia/Jakarta'),
-            // MEDIA_DISK seeds the initial disk choice; afterwards the
-            // setting is the source of truth (editable in the UI).
-            'media_disk' => (string) config('wahabuddy.media_disk', 'public'),
         ])->refresh();
     }
 }

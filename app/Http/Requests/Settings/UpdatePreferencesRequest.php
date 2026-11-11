@@ -6,7 +6,6 @@ use App\Models\AppSetting;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 
 class UpdatePreferencesRequest extends FormRequest
 {
@@ -26,12 +25,8 @@ class UpdatePreferencesRequest extends FormRequest
             'broadcast_batch_size' => ['sometimes', 'required', 'integer', 'min:1', 'max:1000'],
             'broadcast_batch_pause' => ['sometimes', 'required', 'integer', 'min:1', 'max:86400'],
 
-            // Storage & cleanup. S3 is only selectable once its adapter
-            // package and credentials are actually present.
-            'media_disk' => ['sometimes', 'required', 'string', Rule::in($this->availableMediaDisks())],
-            // Public base WAHA downloads local media from (e.g. a tunnel);
-            // null falls back to APP_URL. Only send URLs use it.
-            'media_public_base_url' => ['sometimes', 'nullable', 'url:http,https', 'max:255'],
+            // Storage & cleanup. Uploads are S3-only; there is no storage
+            // disk or public base URL setting anymore.
             'media_cleanup_enabled' => ['sometimes', 'required', 'boolean'],
             'media_cleanup_frequency' => ['sometimes', 'required', 'string', 'in:daily,weekly,monthly,custom'],
             // 0 (Sunday) - 6 (Saturday) for weekly; 1-28 for monthly.
@@ -42,34 +37,10 @@ class UpdatePreferencesRequest extends FormRequest
         ];
     }
 
-    /**
-     * @return array<string, string>
-     */
-    public function messages(): array
-    {
-        return [
-            'media_disk.in' => 'S3 storage needs the S3 adapter package and configured credentials; only the local disk is available.',
-            'media_public_base_url.url' => 'Enter a valid http(s) URL, e.g. https://your-tunnel.example.com.',
-        ];
-    }
-
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('media_public_base_url')) {
-            // Stored trimmed, without a trailing slash (so the resolver can
-            // concatenate); an emptied field clears back to null.
-            $value = trim((string) $this->input('media_public_base_url'));
-
-            $this->merge([
-                'media_public_base_url' => $value === '' ? null : rtrim($value, '/'),
-            ]);
-        }
-    }
-
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            if ($validator->errors()->hasAny(['media_cleanup_frequency', 'media_disk'])) {
+            if ($validator->errors()->has('media_cleanup_frequency')) {
                 return;
             }
 
@@ -103,28 +74,5 @@ class UpdatePreferencesRequest extends FormRequest
                 $validator->errors()->add('media_cleanup_interval_days', 'Enter how many days should pass between cleanups.');
             }
         });
-    }
-
-    /**
-     * Disks an operator may actually select: the local public disk always,
-     * S3 only with the adapter package installed and credentials present
-     * (server-side gate; the UI probes reachability before enabling it).
-     *
-     * @return list<string>
-     */
-    private function availableMediaDisks(): array
-    {
-        $disks = ['public'];
-
-        $s3Ready = class_exists(AwsS3V3Adapter::class)
-            && filled(config('filesystems.disks.s3.key'))
-            && filled(config('filesystems.disks.s3.secret'))
-            && filled(config('filesystems.disks.s3.bucket'));
-
-        if ($s3Ready) {
-            $disks[] = 's3';
-        }
-
-        return $disks;
     }
 }

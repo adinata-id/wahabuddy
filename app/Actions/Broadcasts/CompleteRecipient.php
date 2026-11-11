@@ -93,6 +93,8 @@ final class CompleteRecipient
 
         $event = 'failed';
         $pauseCampaign = false;
+        $pauseEvent = null;
+        $pauseMessage = null;
 
         if ($exception->outcome === 'unknown') {
             // Ambiguous acceptance never auto-retries and pauses the campaign
@@ -101,6 +103,8 @@ final class CompleteRecipient
             $fields['next_attempt_at'] = null;
             $event = 'unknown';
             $pauseCampaign = true;
+            $pauseEvent = 'paused_unknown';
+            $pauseMessage = 'Campaign paused: unknown outcome requires admin resolution before continuing.';
         } elseif ($retryable) {
             $fields['status'] = RecipientStatus::Failed;
             $fields['next_attempt_at'] = $this->nextAttemptAt($recipient, $exception);
@@ -113,6 +117,15 @@ final class CompleteRecipient
             $fields['status'] = RecipientStatus::Failed;
             $fields['next_attempt_at'] = null; // deterministic: held for admin
             $event = 'failed_held';
+
+            // Unsendable media is campaign-wide and deterministic: pause so
+            // the remaining recipients survive until the admin restores the
+            // media, instead of pacing through all of them as failures.
+            if ($exception->errorCode === 'media_unavailable') {
+                $pauseCampaign = true;
+                $pauseEvent = 'paused_media_unavailable';
+                $pauseMessage = 'Campaign paused: the media file is no longer sendable. Upload new media, edit the broadcast, then resume.';
+            }
         }
 
         $recipient->forceFill($fields)->save();
@@ -137,8 +150,8 @@ final class CompleteRecipient
             $broadcast->forceFill(['status' => BroadcastStatus::Paused])->save();
             $broadcast->logs()->create([
                 'recipient_id' => $recipient->id,
-                'event' => 'paused_unknown',
-                'message' => 'Campaign paused: unknown outcome requires admin resolution before continuing.',
+                'event' => $pauseEvent,
+                'message' => $pauseMessage,
             ]);
         }
     }

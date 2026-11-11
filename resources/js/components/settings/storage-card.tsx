@@ -19,7 +19,6 @@ import { postJson } from '@/lib/http';
 import { testStorage as testStorageRoute } from '@/routes/media';
 import { update as updatePreferencesRoute } from '@/routes/settings/preferences';
 import { cleanupRun as cleanupRunRoute } from '@/routes/settings/storage';
-import { checkPublicUrl as checkPublicUrlRoute } from '@/routes/settings/storage';
 import type { StorageSettings } from '@/types/wahabuddy';
 
 const WEEKDAYS = [
@@ -33,8 +32,6 @@ const WEEKDAYS = [
 ];
 
 type StorageForm = {
-    media_disk: string;
-    media_public_base_url: string | null;
     media_cleanup_enabled: boolean;
     media_cleanup_frequency: StorageSettings['cleanup']['frequency'];
     media_cleanup_day: number | null;
@@ -69,12 +66,9 @@ function formatWhen(value: string | null): string {
 
 export function StorageCard({ storage }: { storage: StorageSettings }) {
     const [testing, setTesting] = useState(false);
-    const [checking, setChecking] = useState(false);
     const [running, setRunning] = useState(false);
 
     const form = useForm<StorageForm>({
-        media_disk: storage.media_disk,
-        media_public_base_url: storage.media_public_base_url,
         media_cleanup_enabled: storage.cleanup.enabled,
         media_cleanup_frequency: storage.cleanup.frequency,
         media_cleanup_day: storage.cleanup.day,
@@ -99,7 +93,7 @@ export function StorageCard({ storage }: { storage: StorageSettings }) {
                 reachable: boolean;
                 status: number | null;
                 note: string;
-            }>(testStorageRoute.url(), { disk: form.data.media_disk });
+            }>(testStorageRoute.url(), {});
 
             if (result.reachable) {
                 toast.success('Storage probe passed (from this backend only).');
@@ -112,34 +106,6 @@ export function StorageCard({ storage }: { storage: StorageSettings }) {
             toast.error('Storage probe could not be completed.');
         } finally {
             setTesting(false);
-        }
-    };
-
-    // Probes the URL typed in the field (saved or not) so a dead tunnel is
-    // caught here instead of as failed sends.
-    const probePublicUrl = async () => {
-        setChecking(true);
-
-        try {
-            const result = await postJson<{
-                reachable: boolean;
-                status: number | null;
-                note: string;
-            }>(checkPublicUrlRoute.url(), {
-                base_url: form.data.media_public_base_url,
-            });
-
-            if (result.reachable) {
-                toast.success('Public URL check passed — the base answered.');
-            } else {
-                toast.error(
-                    `Public URL check failed${result.status ? ` (HTTP ${result.status})` : ''}: ${result.note}`,
-                );
-            }
-        } catch {
-            toast.error('Public URL check could not be completed.');
-        } finally {
-            setChecking(false);
         }
     };
 
@@ -218,77 +184,25 @@ export function StorageCard({ storage }: { storage: StorageSettings }) {
                     className="space-y-4"
                 >
                     <div className="grid gap-4 md:max-w-sm">
-                        <Label htmlFor="media_disk">Media storage disk</Label>
-                        <select
-                            id="media_disk"
-                            value={form.data.media_disk}
-                            onChange={(e) =>
-                                form.setData('media_disk', e.target.value)
-                            }
-                            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
-                        >
-                            <option value="public">
-                                Local disk (this server)
-                            </option>
-                            <option value="s3" disabled={!s3Available}>
-                                {s3Available
-                                    ? 'Amazon S3'
-                                    : `Amazon S3 (${s3UnavailableReason})`}
-                            </option>
-                        </select>
-                        <InputError message={form.errors.media_disk} />
+                        <p className="text-sm font-medium">Media storage</p>
+                        <p className="text-xs text-muted-foreground">
+                            {s3Available
+                                ? 'Uploads go to the configured S3-compatible bucket; WAHA receives a fresh presigned URL for every send.'
+                                : `Media upload is disabled (${s3UnavailableReason}). Set the AWS_* environment variables — any S3-compatible bucket or R2 — to enable it.`}
+                        </p>
                         <Button
                             type="button"
                             variant="outline"
                             onClick={probeDisk}
-                            disabled={testing}
+                            disabled={testing || !s3Available}
                         >
                             {testing && <Spinner />}
                             Test storage
                         </Button>
                         <p className="text-xs text-muted-foreground">
-                            Existing files stay on the disk they were uploaded
-                            to; cleanup handles each disk on its own.
-                        </p>
-                    </div>
-
-                    <div className="grid gap-2 md:max-w-sm">
-                        <Label htmlFor="media_public_base_url">
-                            Public media base URL
-                        </Label>
-                        <Input
-                            id="media_public_base_url"
-                            type="url"
-                            placeholder="https://your-tunnel.example.com"
-                            value={form.data.media_public_base_url ?? ''}
-                            onChange={(e) =>
-                                form.setData(
-                                    'media_public_base_url',
-                                    e.target.value === ''
-                                        ? null
-                                        : e.target.value,
-                                )
-                            }
-                        />
-                        <InputError
-                            message={form.errors.media_public_base_url}
-                        />
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={probePublicUrl}
-                            disabled={
-                                checking ||
-                                !form.data.media_public_base_url?.trim()
-                            }
-                        >
-                            {checking && <Spinner />}
-                            Check public URL
-                        </Button>
-                        <p className="text-xs text-muted-foreground">
-                            WAHA downloads image/video media from this base
-                            (e.g. a tunnel domain), so it must be reachable from
-                            the internet. Leave empty to use the app URL.
+                            A probe writes and fetches a tiny object from the
+                            bucket; run an end-to-end story test to confirm the
+                            WAHA network can reach it too.
                         </p>
                     </div>
 

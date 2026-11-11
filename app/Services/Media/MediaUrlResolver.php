@@ -2,7 +2,6 @@
 
 namespace App\Services\Media;
 
-use App\Models\AppSetting;
 use App\Models\MediaFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -16,8 +15,9 @@ final class MediaUrlResolver
 
     /**
      * Fresh URL for the send pipeline. Null when the stored object was
-     * purged or its disk can no longer be resolved — the caller must not
-     * hand WAHA a URL to deleted bytes.
+     * purged, its disk can no longer be resolved, or it lives on a disk
+     * without presigned URLs (legacy local-disk rows) — the caller must
+     * fail the send explicitly instead of handing WAHA a dead URL.
      */
     public function forSend(MediaFile $media): ?string
     {
@@ -25,26 +25,16 @@ final class MediaUrlResolver
             return null;
         }
 
-        try {
-            $disk = Storage::disk($media->disk);
-        } catch (\Throwable) {
+        if (! $this->diskSupportsTemporaryUrls($media->disk)) {
             return null;
         }
 
-        if ($this->diskSupportsTemporaryUrls($media->disk)) {
-            return $disk->temporaryUrl($media->path, now()->addMinutes(self::SIGNED_URL_TTL_MINUTES));
+        try {
+            return Storage::disk($media->disk)
+                ->temporaryUrl($media->path, now()->addMinutes(self::SIGNED_URL_TTL_MINUTES));
+        } catch (\Throwable) {
+            return null;
         }
-
-        // Local media is unreachable for a remote WAHA, so send URLs may be
-        // pointed at a public base (e.g. a tunnel) from Settings. Previews
-        // keep the app URL — the admin's browser can always reach it.
-        $publicBase = AppSetting::singleton()->media_public_base_url;
-
-        if ($publicBase !== null && $publicBase !== '') {
-            return rtrim((string) $publicBase, '/').'/'.$media->path;
-        }
-
-        return $disk->url($media->path);
     }
 
     /**

@@ -7,7 +7,6 @@ use App\Actions\Broadcasts\CompleteRecipient;
 use App\Enums\BroadcastStatus;
 use App\Enums\BroadcastType;
 use App\Enums\RecipientStatus;
-use App\Enums\StoryStatus;
 use App\Models\Broadcast;
 use App\Models\BroadcastRecipient;
 use App\Models\Story;
@@ -56,11 +55,10 @@ class ProcessBroadcastJob implements ShouldQueue
             return; // paused/canceled/terminal jobs are deliberate no-ops
         }
 
-        // Story sends take priority when due (spec I).
-        $storiesDue = Story::query()
-            ->whereIn('status', [StoryStatus::Pending, StoryStatus::Failed])
-            ->where('scheduled_at', '<=', now())
-            ->exists();
+        // Story sends take priority when due (spec I) — "due" must match
+        // what the story dispatcher would actually queue, so held-failure
+        // rows waiting for an admin retry do not starve campaigns.
+        $storiesDue = Story::query()->dispatchable()->exists();
 
         $snapshot = $connections->snapshot();
 
@@ -93,6 +91,20 @@ class ProcessBroadcastJob implements ShouldQueue
                 : null;
 
             try {
+                if ($broadcast->type === BroadcastType::Image && $mediaUrl === null) {
+                    // Storage purged (cleanup race) or a legacy local-disk
+                    // row: no URL WAHA could fetch. Fail the recipient with
+                    // an explicit cause instead of crashing on the client's
+                    // guard — the outcome is deterministic, so it is held
+                    // for the admin, never auto-retried.
+                    throw new WahaRequestException(
+                        'media_unavailable',
+                        null,
+                        'The media file is no longer available (purged by cleanup or stored on the removed local disk); upload new media and edit the broadcast.',
+                        'rejected',
+                    );
+                }
+
                 $result = $client->sendBroadcast($snapshot, $recipient, $broadcast, $mediaUrl);
                 $complete->handle($recipient->id, $token, $result);
             } catch (WahaRequestException $exception) {

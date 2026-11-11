@@ -62,24 +62,12 @@ class StorageSettingsTest extends TestCase
         return $media;
     }
 
-    public function test_save_rejects_s3_disk_until_fully_configured(): void
-    {
-        $this->actingAs($this->admin());
-
-        $this->from(route('settings.index'))
-            ->put(route('settings.preferences.update'), ['media_disk' => 's3'])
-            ->assertSessionHasErrors('media_disk');
-
-        $this->assertSame('public', AppSetting::singleton()->media_disk);
-    }
-
-    public function test_save_public_disk_updates_setting_and_reschedules_next_run(): void
+    public function test_save_updates_cleanup_settings_and_reschedules_next_run(): void
     {
         $this->actingAs($this->admin());
         AppSetting::singleton()->forceFill(['media_cleanup_next_run_at' => now()->subDay()])->save();
 
         $this->put(route('settings.preferences.update'), [
-            'media_disk' => 'public',
             'media_cleanup_enabled' => true,
             'media_cleanup_frequency' => 'daily',
             'media_cleanup_retention_days' => 3,
@@ -87,10 +75,40 @@ class StorageSettingsTest extends TestCase
         ])->assertRedirect();
 
         $settings = AppSetting::singleton()->refresh();
-        $this->assertSame('public', $settings->media_disk);
         $this->assertSame('daily', $settings->media_cleanup_frequency);
         $this->assertNotNull($settings->media_cleanup_next_run_at);
         $this->assertTrue($settings->media_cleanup_next_run_at->isFuture(), 'Saving the schedule must reschedule immediately.');
+    }
+
+    /**
+     * The removed local-disk fields (media_disk, media_public_base_url) are
+     * ignored, not validated: partial saves from an outdated open tab must
+     * still succeed.
+     */
+    public function test_save_ignores_the_removed_disk_and_public_base_url_fields(): void
+    {
+        $this->actingAs($this->admin());
+
+        $this->from(route('settings.index'))
+            ->put(route('settings.preferences.update'), [
+                'media_disk' => 's3',
+                'media_public_base_url' => 'ftp://not-a-web-url',
+                'media_cleanup_enabled' => true,
+                'media_cleanup_frequency' => 'daily',
+                'media_cleanup_retention_days' => 3,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('daily', AppSetting::singleton()->refresh()->media_cleanup_frequency);
+    }
+
+    public function test_check_public_url_endpoint_is_removed(): void
+    {
+        $this->actingAs($this->admin());
+
+        $this->post('/settings/storage/check-public-url', ['base_url' => 'https://tunnel.example.com'])
+            ->assertNotFound();
     }
 
     public function test_save_validates_cadence_shape(): void
@@ -132,7 +150,6 @@ class StorageSettingsTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('settings/index')
-                ->where('storage.media_disk', 'public')
                 ->where('storage.cleanup.enabled', true)
                 ->where('storage.cleanup.frequency', 'weekly')
                 ->where('storage.cleanup.retention_days', 3)

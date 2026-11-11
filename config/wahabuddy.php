@@ -37,15 +37,6 @@ return [
 
     /*
     |----------------------------------------------------------------------
-    | Media storage
-    |----------------------------------------------------------------------
-    | Default disk for story/broadcast media: "public" (local, world-readable
-    | URLs) or "s3" (S3-compatible / R2 with presigned URLs per send).
-    */
-    'media_disk' => env('MEDIA_DISK', 'public'),
-
-    /*
-    |----------------------------------------------------------------------
     | HTTP behavior toward WAHA
     |----------------------------------------------------------------------
     | Send requests must never auto-retry (non-idempotent POSTs); read-only

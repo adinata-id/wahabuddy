@@ -72,24 +72,31 @@ class SendStoryJob implements ShouldQueue
         if ($story->mediaFile !== null) {
             $mediaUrl = $urls->forSend($story->mediaFile);
 
-            // Storage purged (cleanup race or an unresolvable disk): fail
-            // the story with an explicit cause instead of sending WAHA a
-            // URL to deleted bytes and failing with a confusing fetch error.
+            // Storage purged (cleanup race) or a legacy local-disk row: no
+            // URL WAHA could fetch. Fail the story with an explicit cause
+            // instead of sending WAHA dead bytes and failing with a
+            // confusing fetch error.
             if ($mediaUrl === null) {
-                Story::query()
+                $message = 'The media file is no longer available (purged by cleanup or stored on the removed local disk); upload new media and edit the story.';
+
+                $marked = Story::query()
                     ->whereKey($story->id)
                     ->where('status', StoryStatus::Pending->value)
                     ->update([
                         'status' => StoryStatus::Failed->value,
                         'next_attempt_at' => null,
-                        'last_error' => 'The media file was removed by cleanup; upload new media and edit the story.',
-                        'last_error_code' => 'media_purged',
+                        'last_error' => $message,
+                        'last_error_code' => 'media_unavailable',
                     ]);
 
-                $story->logs()->create([
-                    'event' => 'failed_held',
-                    'message' => 'The media file was removed by cleanup; upload new media and edit the story.',
-                ]);
+                // Log only on the transition: a duplicate worker on an
+                // already-failed row must not append another entry.
+                if ($marked > 0) {
+                    $story->logs()->create([
+                        'event' => 'failed_held',
+                        'message' => $message,
+                    ]);
+                }
 
                 return;
             }

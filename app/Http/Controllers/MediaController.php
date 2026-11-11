@@ -2,18 +2,17 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\AppSetting;
 use App\Models\Broadcast;
 use App\Models\MediaFile;
 use App\Models\Story;
 use App\Services\Media\MediaUrlResolver;
+use App\Services\Media\S3Availability;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class MediaController extends Controller
 {
@@ -49,7 +48,13 @@ class MediaController extends Controller
             return $this->uploadFailure('file', 'Unsupported media type. Accepted: JPEG, PNG, WebP images and MP4 video that matches the WhatsApp format.');
         }
 
-        $diskName = (string) AppSetting::singleton()->media_disk;
+        // WAHA downloads media itself, so uploads are S3-only: without a
+        // reachable bucket there is no URL WAHA could fetch.
+        if (! S3Availability::configured()) {
+            return $this->uploadFailure('file', 'S3 storage is not configured. Set the AWS_* environment variables (any S3-compatible bucket or R2) before uploading media.');
+        }
+
+        $diskName = 's3';
         $path = sprintf(
             'stories/%s/%s/%s.%s',
             now()->format('Y'),
@@ -113,29 +118,24 @@ class MediaController extends Controller
     }
 
     /**
-     * Storage probe: write a tiny object, fetch it from the backend with a
-     * short timeout, then always clean up (spec H.6). Backend reachability is
-     * NOT proof that the WAHA network can reach the URL. An optional disk
-     * parameter probes S3 before the operator switches to it; a disk whose
-     * driver cannot even be resolved (adapter missing) reports unreachable.
+     * Storage probe: write a tiny object to the s3 disk, fetch it from the
+     * backend with a short timeout, then always clean up (spec H.6). Backend
+     * reachability is NOT proof that the WAHA network can reach the URL. An
+     * unusable s3 disk (adapter missing, credentials empty) reports
+     * unreachable instead of a fatal driver error.
      */
     public function testStorage(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'disk' => ['nullable', 'string', Rule::in(['public', 's3'])],
-        ]);
-
-        $diskName = $validated['disk'] ?? (string) AppSetting::singleton()->media_disk;
         $path = 'stories/probe-'.Str::uuid().'.txt';
         $url = null;
         $disk = null;
 
         try {
-            $disk = Storage::disk($diskName);
+            $disk = Storage::disk('s3');
             $disk->put($path, 'wahabuddy storage probe');
 
             $probe = new MediaFile([
-                'disk' => $diskName,
+                'disk' => 's3',
                 'path' => $path,
                 'original_name' => basename($path),
                 'mime_type' => 'text/plain',

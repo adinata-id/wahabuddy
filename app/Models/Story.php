@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\StoryStatus;
 use App\Enums\StoryType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -71,6 +72,39 @@ class Story extends Model
             'connection_revision' => 'integer',
             'media_file_id' => 'integer',
         ];
+    }
+
+    /**
+     * Rows the minute dispatcher would queue right now, inside the 7-day
+     * send window. Pending rows are due at their scheduled time; Failed
+     * rows only when a retry backoff has elapsed — a Failed row with no
+     * retry scheduled is HELD for an explicit admin retry and must stay
+     * out, or every tick re-queues a no-op job (and broadcast jobs keep
+     * yielding to "due" stories that do not exist).
+     *
+     * @param  Builder<Story>  $query
+     * @return Builder<Story>
+     */
+    public function scopeDispatchable(Builder $query): Builder
+    {
+        $expireBefore = now()->subDays((int) config('wahabuddy.stories.expire_after_days', 7));
+
+        return $query
+            ->whereIn('status', [StoryStatus::Pending, StoryStatus::Failed])
+            ->where('scheduled_at', '<=', now())
+            ->where('scheduled_at', '>=', $expireBefore)
+            ->where(function (Builder $query): void {
+                $query->where(function (Builder $inner): void {
+                    $inner->where('status', StoryStatus::Pending->value)
+                        ->where(fn (Builder $when) => $when
+                            ->whereNull('next_attempt_at')
+                            ->orWhere('next_attempt_at', '<=', now()));
+                })->orWhere(function (Builder $inner): void {
+                    $inner->where('status', StoryStatus::Failed->value)
+                        ->whereNotNull('next_attempt_at')
+                        ->where('next_attempt_at', '<=', now());
+                });
+            });
     }
 
     /** @return BelongsTo<MediaFile, $this> */

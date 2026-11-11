@@ -9,9 +9,11 @@ use App\Enums\SendAttemptOutcome;
 use App\Enums\SendAttemptSubject;
 use App\Enums\StoryStatus;
 use App\Jobs\SendStoryJob;
+use App\Models\MediaFile;
 use App\Models\SchedulerRun;
 use App\Models\SendAttempt;
 use App\Models\Story;
+use App\Models\User;
 use App\Models\WahaConnection;
 use App\Services\Media\MediaUrlResolver;
 use App\Services\Sending\SessionSendGate;
@@ -138,6 +140,93 @@ class StorySchedulerTest extends TestCase
         $this->assertSame(SendAttemptOutcome::Sent, $attempt->outcome);
         $this->assertSame('msg-1', $attempt->message_id);
         $this->assertNotNull($attempt->finished_at);
+    }
+
+    public function test_send_fails_with_explicit_cause_when_media_is_no_longer_sendable(): void
+    {
+        $this->workingConnection();
+        Http::preventStrayRequests();
+
+        // Legacy local-disk row: previews still work, but there is no URL a
+        // remote WAHA could fetch, so the story must fail explicitly instead
+        // of WAHA being handed a dead URL.
+        $media = MediaFile::create([
+            'disk' => 'public',
+            'path' => 'stories/2026/10/legacy.jpg',
+            'original_name' => 'legacy.jpg',
+            'mime_type' => 'image/jpeg',
+            'size_bytes' => 100,
+            'created_by' => User::factory()->create()->id,
+        ]);
+
+        $story = $this->makeStory(['type' => 'image', 'media_file_id' => $media->id]);
+        $this->runJob($story);
+
+        $story = $story->fresh();
+        $this->assertSame(StoryStatus::Failed, $story->status);
+        $this->assertSame('media_unavailable', $story->last_error_code);
+        $this->assertStringContainsString('no longer available', (string) $story->last_error);
+        $this->assertNull($story->next_attempt_at);
+        $this->assertSame(0, $story->attempts, 'A missing URL must not burn a send attempt.');
+        Http::assertNothingSent();
+
+        $this->assertDatabaseHas('story_logs', [
+            'story_id' => $story->id,
+            'event' => 'failed_held',
+        ]);
+    }
+
+    public function test_dispatcher_does_not_redispatch_stories_held_for_admin(): void
+    {
+        Queue::fake();
+
+        // Held rows are Failed with no retry scheduled (deterministic
+        // rejections, media no longer sendable): they wait for an explicit
+        // admin retry and must leave the due set — otherwise every tick
+        // re-queues a no-op job forever.
+        $this->makeStory([
+            'status' => StoryStatus::Failed,
+            'next_attempt_at' => null,
+            'last_error' => 'held for admin',
+        ]);
+
+        $this->artisan('waha:send-stories')->assertSuccessful();
+        Queue::assertNotPushed(SendStoryJob::class);
+
+        // A retryable failure whose backoff has elapsed is due again.
+        $retryable = $this->makeStory([
+            'status' => StoryStatus::Failed,
+            'next_attempt_at' => now()->subMinute(),
+        ]);
+
+        $this->artisan('waha:send-stories')->assertSuccessful();
+        Queue::assertPushed(SendStoryJob::class, fn (SendStoryJob $job) => $job->storyId === $retryable->id);
+        Queue::assertPushed(SendStoryJob::class, 1);
+    }
+
+    public function test_media_unavailable_failure_writes_the_log_once(): void
+    {
+        $this->workingConnection();
+        Http::preventStrayRequests();
+
+        $media = MediaFile::create([
+            'disk' => 'public',
+            'path' => 'stories/2026/10/legacy.jpg',
+            'original_name' => 'legacy.jpg',
+            'mime_type' => 'image/jpeg',
+            'size_bytes' => 100,
+            'created_by' => User::factory()->create()->id,
+        ]);
+
+        $story = $this->makeStory(['type' => 'image', 'media_file_id' => $media->id]);
+
+        // A duplicate worker (e.g. queued before the first finished) must
+        // not append a second failure log for the same cause.
+        $this->runJob($story);
+        $this->runJob($story->fresh());
+
+        $this->assertSame(StoryStatus::Failed, $story->fresh()->status);
+        $this->assertSame(1, $story->logs()->where('event', 'failed_held')->count());
     }
 
     public function test_credential_failure_holds_without_burning_attempts(): void

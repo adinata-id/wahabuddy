@@ -56,15 +56,12 @@ class DispatchDueStories extends Command
             }
 
             // 2) Queue one job per due row (chunked; revision holds applied).
+            // Held failures (no retry scheduled) stay out of the due set —
+            // they wait for an explicit admin retry (Story::scopeDispatchable).
             $revision = $connections->current()->revision;
 
             Story::query()
-                ->whereIn('status', [StoryStatus::Pending, StoryStatus::Failed])
-                ->where('scheduled_at', '<=', now())
-                ->where('scheduled_at', '>=', $expireBefore)
-                ->where(function ($query): void {
-                    $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', now());
-                })
+                ->dispatchable()
                 ->orderBy('scheduled_at')
                 ->chunkById(100, function ($chunk) use (&$processed, &$errors, &$lastError): void {
                     foreach ($chunk as $story) {

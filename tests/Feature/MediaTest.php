@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\AppSetting;
 use App\Models\MediaFile;
 use App\Models\Story;
 use App\Models\User;
@@ -65,9 +64,25 @@ class MediaTest extends TestCase
         $this->assertDatabaseCount('media_files', 0);
     }
 
+    /**
+     * Uploads are S3-only: the gate and the resolver both read the s3 disk
+     * config, so tests make the configured state explicit.
+     */
+    private function configureS3Credentials(): void
+    {
+        config([
+            'filesystems.disks.s3.driver' => 's3',
+            'filesystems.disks.s3.key' => 'test-key',
+            'filesystems.disks.s3.secret' => 'test-secret',
+            'filesystems.disks.s3.bucket' => 'test-bucket',
+            'filesystems.disks.s3.region' => 'auto',
+        ]);
+    }
+
     public function test_accepts_supported_images_with_detected_mime(): void
     {
-        Storage::fake('public');
+        $this->configureS3Credentials();
+        Storage::fake('s3');
         $this->actingAs($this->admin());
 
         $response = $this->postJson(route('media.store'), ['file' => $this->jpeg()]);
@@ -75,11 +90,27 @@ class MediaTest extends TestCase
         $response->assertOk()->assertJsonPath('mime_type', 'image/jpeg');
 
         $media = MediaFile::first();
-        $this->assertSame('public', $media->disk);
+        $this->assertSame('s3', $media->disk);
         $this->assertSame('photo.jpg', $media->original_name);
         $this->assertMatchesRegularExpression('#^stories/\d{4}/\d{2}/[0-9a-f-]{36}\.jpg$#', $media->path);
 
-        Storage::disk('public')->assertExists($media->path);
+        Storage::disk('s3')->assertExists($media->path);
+    }
+
+    public function test_upload_returns_422_when_s3_is_not_configured(): void
+    {
+        config([
+            'filesystems.disks.s3.key' => null,
+            'filesystems.disks.s3.secret' => null,
+            'filesystems.disks.s3.bucket' => null,
+        ]);
+        $this->actingAs($this->admin());
+
+        $this->postJson(route('media.store'), ['file' => $this->jpeg()])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.file.0', fn ($m) => str_contains($m, 'S3 storage is not configured'));
+
+        $this->assertDatabaseCount('media_files', 0);
     }
 
     public function test_referenced_media_cannot_be_deleted(): void
@@ -171,6 +202,10 @@ class MediaTest extends TestCase
             'filesystems.disks.public.url' => 'https://app.example.test/storage',
         ]);
 
+        // Legacy rows from the removed local-disk mode stay previewable via
+        // the app URL, but are no longer sendable — a remote WAHA could not
+        // fetch them, so the resolver must refuse instead of handing WAHA a
+        // dead URL.
         $local = MediaFile::create([
             'disk' => 'public',
             'path' => 'stories/2026/10/pic.jpg',
@@ -180,8 +215,11 @@ class MediaTest extends TestCase
             'created_by' => $this->admin()->id,
         ]);
 
-        $url = app(MediaUrlResolver::class)->forSend($local);
-        $this->assertSame('https://app.example.test/storage/stories/2026/10/pic.jpg', $url);
+        $this->assertNull(app(MediaUrlResolver::class)->forSend($local));
+        $this->assertSame(
+            'https://app.example.test/storage/stories/2026/10/pic.jpg',
+            app(MediaUrlResolver::class)->forPreview($local),
+        );
 
         // S3-style private disk resolves to a time-limited signed URL without
         // embedding storage credentials.
@@ -219,7 +257,8 @@ class MediaTest extends TestCase
 
     public function test_storage_probe_cleans_up_even_when_fetch_fails(): void
     {
-        Storage::fake('public');
+        $this->configureS3Credentials();
+        Storage::fake('s3');
         $this->actingAs($this->admin());
 
         Http::fake([
@@ -232,37 +271,19 @@ class MediaTest extends TestCase
         $this->assertFalse($response->json('reachable'));
 
         // The temporary probe object must be gone regardless of fetch result.
-        $remaining = collect(Storage::disk('public')->allFiles())->filter(fn ($p) => str_starts_with($p, 'stories/'));
+        $remaining = collect(Storage::disk('s3')->allFiles())->filter(fn ($p) => str_starts_with($p, 'stories/'));
         $this->assertCount(0, $remaining);
         $this->assertDatabaseCount('media_files', 0);
     }
 
-    public function test_upload_writes_to_the_selected_settings_disk(): void
-    {
-        config(['filesystems.disks.secondary' => [
-            'driver' => 'local',
-            'root' => storage_path('framework/testing/disks/secondary'),
-            'throw' => false,
-        ]]);
-        Storage::fake('secondary');
-        AppSetting::singleton()->forceFill(['media_disk' => 'secondary'])->save();
-        $this->actingAs($this->admin());
-
-        $this->postJson(route('media.store'), ['file' => $this->jpeg()])
-            ->assertOk();
-
-        $media = MediaFile::first();
-        $this->assertSame('secondary', $media->disk);
-        Storage::disk('secondary')->assertExists($media->path);
-    }
-
     public function test_upload_returns_422_when_storage_write_fails(): void
     {
+        $this->configureS3Credentials();
         $this->actingAs($this->admin());
 
         $disk = $this->mock(FilesystemAdapter::class);
         $disk->shouldReceive('put')->andReturn(false);
-        Storage::shouldReceive('disk')->with('public')->andReturn($disk);
+        Storage::shouldReceive('disk')->with('s3')->andReturn($disk);
 
         $this->postJson(route('media.store'), ['file' => $this->jpeg()])
             ->assertStatus(422)
@@ -271,30 +292,19 @@ class MediaTest extends TestCase
         $this->assertDatabaseCount('media_files', 0);
     }
 
-    public function test_upload_returns_422_when_disk_driver_cannot_be_resolved(): void
+    public function test_storage_probe_reports_unconfigured_s3_as_unreachable(): void
     {
+        config([
+            'filesystems.disks.s3.key' => null,
+            'filesystems.disks.s3.secret' => null,
+            'filesystems.disks.s3.bucket' => null,
+        ]);
         $this->actingAs($this->admin());
-        AppSetting::singleton()->forceFill(['media_disk' => 's3'])->save();
+        Http::preventStrayRequests();
 
-        // No S3 adapter installed: driver resolution itself throws, which
-        // must surface as a friendly 422 instead of a 500.
-        $this->postJson(route('media.store'), ['file' => $this->jpeg()])
-            ->assertStatus(422)
-            ->assertJsonPath('errors.file.0', fn ($m) => str_contains($m, 'Storing the upload failed'));
-
-        $this->assertDatabaseCount('media_files', 0);
-    }
-
-    public function test_storage_probe_accepts_disk_param_and_reports_missing_s3_adapter(): void
-    {
-        $this->actingAs($this->admin());
-
-        $this->postJson(route('media.test-storage'), ['disk' => 'not-a-disk'])
-            ->assertStatus(422);
-
-        // Without the S3 adapter installed the probe must degrade to
-        // reachable=false instead of a fatal driver error.
-        $response = $this->postJson(route('media.test-storage'), ['disk' => 's3']);
+        // An unusable s3 disk must degrade to reachable=false instead of a
+        // fatal driver error; nothing is persisted.
+        $response = $this->postJson(route('media.test-storage'));
 
         $response->assertOk();
         $this->assertFalse($response->json('reachable'));

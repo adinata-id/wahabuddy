@@ -7,12 +7,12 @@ use App\Models\AppSetting;
 use App\Models\MediaCleanupRun;
 use App\Models\MediaFile;
 use App\Models\WahaConnection;
+use App\Services\Media\S3Availability;
 use App\Services\Media\SentMediaCleanup;
 use App\Services\Waha\CapabilityResolver;
 use App\Services\Waha\ConnectionRepository;
 use Inertia\Inertia;
 use Inertia\Response;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 
 class SettingsController extends Controller
 {
@@ -40,7 +40,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Everything the storage card shows: disk selection, cleanup schedule,
+     * Everything the storage card shows: S3 status, cleanup schedule,
      * a live eligible-now estimate, per-disk usage, and run history.
      *
      * @return array<string, mixed>
@@ -79,8 +79,6 @@ class SettingsController extends Controller
             ->all();
 
         return [
-            'media_disk' => $preferences->media_disk,
-            'media_public_base_url' => $preferences->media_public_base_url,
             'cleanup' => [
                 'enabled' => (bool) $preferences->media_cleanup_enabled,
                 'frequency' => $preferences->media_cleanup_frequency,
@@ -97,10 +95,8 @@ class SettingsController extends Controller
             ],
             'disk_usage' => $diskUsage,
             'capabilities' => [
-                's3_adapter_installed' => class_exists(AwsS3V3Adapter::class),
-                's3_credentials_present' => filled(config('filesystems.disks.s3.key'))
-                    && filled(config('filesystems.disks.s3.secret'))
-                    && filled(config('filesystems.disks.s3.bucket')),
+                's3_adapter_installed' => S3Availability::adapterInstalled(),
+                's3_credentials_present' => S3Availability::credentialsConfigured(),
             ],
             'recent_runs' => $recentRuns,
         ];

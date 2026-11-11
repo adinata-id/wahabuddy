@@ -44,19 +44,21 @@ npm run build
 
 cp .env.example .env
 php artisan key:generate --ansi      # FIRST INSTALLATION ONLY
-$EDITOR .env                         # APP_URL, DB_*, optionally MEDIA_DISK/AWS_*
+$EDITOR .env                         # APP_URL, DB_*, AWS_* (required for media upload)
 php artisan migrate --force
-php artisan storage:link
+php artisan storage:link             # only serves media left over from the removed local-disk mode
 php artisan wahabuddy:admin          # interactive admin creation (hidden password)
 
 chown -R www-data:www-data storage bootstrap/cache
 ```
 
-Media must be fetchable **from the WAHA container/host network**: set
-`APP_URL` to an address WAHA can reach — `localhost` inside the WAHA
-container is not your server. If media lives on S3/R2, fill the `AWS_*`
-block, set `MEDIA_DISK=s3`, and use the **Test storage** button on the
-Settings page (a backend fetch still doesn't prove WAHA can reach it).
+Media storage is **S3-only**: WAHA downloads image/video files itself, so
+uploads are handed to WAHA as short-lived presigned URLs. Fill the `AWS_*`
+block with any S3-compatible bucket (e.g. Cloudflare R2) and use the
+**Test storage** button on the Settings page (a backend fetch still
+doesn't prove WAHA can reach it). Local-disk media is not supported; files
+left over from the removed local-disk mode stay previewable but can no
+longer be sent — re-upload them.
 
 ### Deploy/update
 
@@ -165,8 +167,9 @@ Back up three things, together:
 
 1. **Database**: `mysqldump wahabuddy > wahabuddy.sql`
    (Docker: `docker compose exec db mysqldump -u<wahabuddy> -p wahabuddy`).
-2. **Media**: the `storage/app/public/stories` tree (local disk) — or nothing
-   extra when `MEDIA_DISK=s3`.
+2. **Media**: the S3 bucket itself (snapshots/versioning on the bucket side);
+   also keep `storage/app/public/stories` if you still have files left over
+   from the removed local-disk mode.
 3. **`APP_KEY`** from `.env` — required to decrypt the stored WAHA
    credentials.
 

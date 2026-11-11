@@ -46,8 +46,6 @@ export type MediaCleanupRunSummary = {
 };
 
 export type StorageSettings = {
-    media_disk: string;
-    media_public_base_url: string | null;
     cleanup: {
         enabled: boolean;
         frequency: 'daily' | 'weekly' | 'monthly' | 'custom';

@@ -12,8 +12,12 @@ use App\Actions\Broadcasts\ResumeBroadcast;
 use App\Enums\BroadcastStatus;
 use App\Enums\BroadcastType;
 use App\Enums\RecipientStatus;
+use App\Enums\StoryStatus;
 use App\Jobs\ProcessBroadcastJob;
 use App\Models\Broadcast;
+use App\Models\MediaFile;
+use App\Models\Story;
+use App\Models\User;
 use App\Models\WahaConnection;
 use App\Services\Broadcasts\PacingClock;
 use App\Services\Media\MediaUrlResolver;
@@ -258,6 +262,89 @@ class BroadcastTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         app(CancelBroadcast::class)->handle($fresh);
+    }
+
+    public function test_image_broadcast_recipient_fails_when_media_is_no_longer_sendable(): void
+    {
+        $this->workingConnection();
+        Queue::fake();
+        Http::preventStrayRequests();
+
+        // Legacy local-disk row: there is no fresh presigned URL a remote
+        // WAHA could fetch, so the recipient must fail with an explicit
+        // cause instead of the worker crashing on the client guard.
+        $media = MediaFile::create([
+            'disk' => 'public',
+            'path' => 'stories/2026/10/legacy.jpg',
+            'original_name' => 'legacy.jpg',
+            'mime_type' => 'image/jpeg',
+            'size_bytes' => 100,
+            'created_by' => User::factory()->create()->id,
+        ]);
+
+        $broadcast = $this->makeBroadcast([
+            'type' => BroadcastType::Image,
+            'media_file_id' => $media->id,
+            'status' => BroadcastStatus::Running,
+            'next_send_at' => now()->subSecond(),
+        ]);
+        $broadcast->recipients()->createMany([
+            ['chat_id' => '628111111111@c.us', 'rendered_text' => 'Hi!', 'status' => RecipientStatus::Pending],
+            ['chat_id' => '628222222222@c.us', 'rendered_text' => 'Hi!', 'status' => RecipientStatus::Pending],
+        ]);
+
+        $this->runJob($broadcast);
+
+        $failed = $broadcast->recipients()->where('chat_id', '628111111111@c.us')->first();
+        $this->assertSame(RecipientStatus::Failed, $failed->status);
+        $this->assertSame('media_unavailable', $failed->last_error_code);
+        $this->assertStringContainsString('no longer available', (string) $failed->last_error);
+        $this->assertNull($failed->next_attempt_at, 'A missing URL is deterministic: held for the admin, never auto-retried.');
+        Http::assertNothingSent();
+
+        // The cause is campaign-wide and deterministic: pause instead of
+        // pacing through every remaining recipient as a failure.
+        $this->assertSame(BroadcastStatus::Paused, $broadcast->fresh()->status);
+        $untouched = $broadcast->recipients()->where('chat_id', '628222222222@c.us')->first();
+        $this->assertSame(RecipientStatus::Pending, $untouched->status);
+
+        $this->assertDatabaseHas('broadcast_logs', [
+            'broadcast_id' => $broadcast->id,
+            'event' => 'failed_held',
+        ]);
+        $this->assertDatabaseHas('broadcast_logs', [
+            'broadcast_id' => $broadcast->id,
+            'event' => 'paused_media_unavailable',
+        ]);
+    }
+
+    public function test_broadcasts_proceed_while_a_story_is_held_for_admin(): void
+    {
+        $this->workingConnection();
+        Queue::fake();
+        Http::fake(['*' => Http::response(['id' => 'm1'], 200)]);
+
+        // A held story (Failed, no retry scheduled) is not "due" work: it
+        // must not make every broadcast job yield forever.
+        Story::create([
+            'type' => 'text',
+            'text' => 'held',
+            'scheduled_at' => now()->subMinute(),
+            'status' => StoryStatus::Failed,
+            'next_attempt_at' => null,
+            'connection_revision' => 1,
+        ]);
+
+        $broadcast = $this->makeBroadcast(['status' => BroadcastStatus::Running, 'next_send_at' => now()->subSecond()]);
+        $broadcast->recipients()->create([
+            'chat_id' => '628111111111@c.us',
+            'rendered_text' => 'Hi!',
+            'status' => RecipientStatus::Pending,
+        ]);
+
+        $this->runJob($broadcast);
+
+        $this->assertSame(RecipientStatus::Sent, $broadcast->recipients()->first()->status);
     }
 
     public function test_unknown_outcome_pauses_campaign_and_needs_explicit_resolution(): void
