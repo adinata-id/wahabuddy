@@ -28,6 +28,12 @@
         <env name="CACHE_STORE" value="array"/>
         <env name="DB_CONNECTION" value="mysql"/>
         <env name="DB_DATABASE" value="wahabuddy_testing"/>
+        <env name="AWS_ACCESS_KEY_ID" value=""/>
+        <env name="AWS_SECRET_ACCESS_KEY" value=""/>
+        <env name="AWS_DEFAULT_REGION" value=""/>
+        <env name="AWS_BUCKET" value=""/>
+        <env name="AWS_ENDPOINT" value=""/>
+        <env name="AWS_USE_PATH_STYLE_ENDPOINT" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
