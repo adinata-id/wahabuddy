@@ -45,6 +45,33 @@ class S3ConnectionTest extends TestCase
         $this->assertFalse($row->isConfigured());
     }
 
+    /**
+     * .env.example ships blank AWS_* values and env() returns '' (not null)
+     * for set-but-empty vars — the seed must normalize those to null instead
+     * of persisting empty strings.
+     */
+    public function test_blank_env_values_seed_as_null_not_empty_strings(): void
+    {
+        config(['filesystems.disks.s3' => [
+            'driver' => 's3',
+            'key' => '',
+            'secret' => '',
+            'bucket' => '',
+            'region' => '',
+            'endpoint' => '',
+            'use_path_style_endpoint' => true,
+        ]]);
+
+        $row = S3Connection::singleton();
+
+        $this->assertNull($row->key);
+        $this->assertNull($row->secret);
+        $this->assertNull($row->bucket);
+        $this->assertNull($row->endpoint);
+        $this->assertSame('auto', $row->region);
+        $this->assertFalse($row->enabled);
+    }
+
     public function test_existing_row_is_never_reseeded_from_env(): void
     {
         $row = S3Connection::singleton();

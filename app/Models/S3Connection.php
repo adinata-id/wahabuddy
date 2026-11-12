@@ -122,11 +122,14 @@ class S3Connection extends Model
             'enabled' => filled($disk['key'] ?? null)
                 && filled($disk['secret'] ?? null)
                 && filled($disk['bucket'] ?? null),
-            'key' => $disk['key'] ?? null,
-            'secret' => $disk['secret'] ?? null,
-            'bucket' => $disk['bucket'] ?? null,
+            // Blank .env values arrive as '' (env() never yields null for
+            // set-but-empty vars) — seed them as null so has_*/isConfigured
+            // never see phantom credentials.
+            'key' => filled($disk['key'] ?? null) ? $disk['key'] : null,
+            'secret' => filled($disk['secret'] ?? null) ? $disk['secret'] : null,
+            'bucket' => filled($disk['bucket'] ?? null) ? $disk['bucket'] : null,
             'region' => filled($disk['region'] ?? null) ? $disk['region'] : 'auto',
-            'endpoint' => $disk['endpoint'] ?? null,
+            'endpoint' => filled($disk['endpoint'] ?? null) ? $disk['endpoint'] : null,
             'use_path_style_endpoint' => (bool) ($disk['use_path_style_endpoint'] ?? true),
         ];
     }

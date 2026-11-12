@@ -564,6 +564,28 @@ class StorageSettingsTest extends TestCase
         $this->assertStringNotContainsString('AKIA-abcd1234', $response);
     }
 
+    /**
+     * Fresh installs seed the secret from a blank AWS_SECRET_ACCESS_KEY:
+     * env() returns '' (not null) for set-but-empty vars, so the row stores
+     * an empty string. That must not surface as "secret configured" — the
+     * form would offer to keep/clear a secret that does not exist.
+     */
+    public function test_settings_page_does_not_report_an_empty_stored_secret_as_configured(): void
+    {
+        $this->actingAs($this->admin());
+
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'AKIA-abcd1234', 'secret' => '', 'bucket' => 'b',
+        ])->save();
+
+        $this->get(route('settings.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('storage.connection.has_key', true)
+                ->where('storage.connection.has_secret', false)
+                ->where('storage.connection.configured', false));
+    }
+
     public function test_settings_page_flags_unreadable_credentials(): void
     {
         $this->actingAs($this->admin());

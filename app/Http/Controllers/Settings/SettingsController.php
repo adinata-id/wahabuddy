@@ -112,7 +112,7 @@ class SettingsController extends Controller
         try {
             $hasKey = filled($row->key);
             $keyHint = $hasKey ? self::maskHint($row->key) : null;
-            $hasSecret = $row->secret !== null;
+            $hasSecret = filled($row->secret);
             $unreadable = false;
         } catch (DecryptException) {
             $hasKey = false;
