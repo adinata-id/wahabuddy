@@ -6,11 +6,11 @@ use App\Models\MediaFile;
 use App\Models\S3Connection;
 use App\Models\Story;
 use App\Models\User;
+use App\Services\Media\MediaStorage;
 use App\Services\Media\MediaUrlResolver;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -66,33 +66,24 @@ class MediaTest extends TestCase
     }
 
     /**
-     * Uploads are S3-only: the gate and the resolver both read the s3 disk
-     * config, so tests make the configured state explicit.
+     * Enabled storage row + swapped fake adapter — the upload gate, the
+     * resolver, and destroy all speak to this. Credentials are distinctive
+     * so tests can assert they never leak into URLs or responses.
      */
-    private function configureS3Credentials(): void
-    {
-        config([
-            'filesystems.disks.s3.driver' => 's3',
-            'filesystems.disks.s3.key' => 'test-key',
-            'filesystems.disks.s3.secret' => 'test-secret',
-            'filesystems.disks.s3.bucket' => 'test-bucket',
-            'filesystems.disks.s3.region' => 'auto',
-        ]);
-    }
-
-    /** Enabled storage row + swapped fake adapter — resolver speaks to this. */
     private function enableS3Storage(): void
     {
         S3Connection::singleton()->forceFill([
-            'enabled' => true, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+            'enabled' => true,
+            'key' => 'AKIA-PROBE-KEY-1234',
+            'secret' => 'probe-secret-value-5678',
+            'bucket' => 'probe-bucket',
         ])->save();
         $this->swapMediaStorageWithFake();
     }
 
     public function test_accepts_supported_images_with_detected_mime(): void
     {
-        $this->configureS3Credentials();
-        Storage::fake('s3');
+        $this->enableS3Storage();
         $this->actingAs($this->admin());
 
         $response = $this->postJson(route('media.store'), ['file' => $this->jpeg()]);
@@ -105,20 +96,40 @@ class MediaTest extends TestCase
         $this->assertMatchesRegularExpression('#^stories/\d{4}/\d{2}/[0-9a-f-]{36}\.jpg$#', $media->path);
 
         Storage::disk('s3')->assertExists($media->path);
+
+        // The response URL must never embed the storage credentials.
+        $url = $response->json('url');
+        $this->assertIsString($url);
+        $this->assertStringNotContainsString('AKIA-PROBE-KEY-1234', $url);
+        $this->assertStringNotContainsString('probe-secret-value-5678', $url);
     }
 
     public function test_upload_returns_422_when_s3_is_not_configured(): void
     {
-        config([
-            'filesystems.disks.s3.key' => null,
-            'filesystems.disks.s3.secret' => null,
-            'filesystems.disks.s3.bucket' => null,
-        ]);
+        // Pin the env seed empty AND swap a fake adapter so no real
+        // adapter is ever built (the dev .env may carry live credentials
+        // into the testing config despite the phpunit.xml neutralization).
+        config(['filesystems.disks.s3' => ['driver' => 's3']]);
+        $this->swapMediaStorageWithFake();
         $this->actingAs($this->admin());
 
         $this->postJson(route('media.store'), ['file' => $this->jpeg()])
             ->assertStatus(422)
-            ->assertJsonPath('errors.file.0', fn ($m) => str_contains($m, 'S3 storage is not configured'));
+            ->assertJsonPath('errors.file.0', fn ($m) => str_contains($m, 'disabled or not configured'));
+
+        $this->assertDatabaseCount('media_files', 0);
+    }
+
+    public function test_upload_returns_422_when_s3_is_disabled_but_configured(): void
+    {
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+        $this->actingAs($this->admin());
+
+        $this->postJson(route('media.store'), ['file' => $this->jpeg()])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.file.0', fn ($m) => str_contains($m, 'disabled or not configured'));
 
         $this->assertDatabaseCount('media_files', 0);
     }
@@ -161,6 +172,27 @@ class MediaTest extends TestCase
 
         $this->deleteJson(route('media.destroy', $orphan))->assertOk();
         $this->assertDatabaseMissing('media_files', ['id' => $orphan->id]);
+    }
+
+    public function test_destroy_deletes_s3_media_through_media_storage(): void
+    {
+        $this->enableS3Storage();
+        $disk = $this->mock(FilesystemAdapter::class);
+        $disk->shouldReceive('delete')->once()->with('stories/2026/11/x.jpg')->andReturn(true);
+        $this->app->instance(MediaStorage::class, new MediaStorage(fn () => $disk));
+        $this->actingAs($this->admin());
+
+        $media = MediaFile::create([
+            'disk' => 's3',
+            'path' => 'stories/2026/11/x.jpg',
+            'original_name' => 'x.jpg',
+            'mime_type' => 'image/jpeg',
+            'size_bytes' => 1,
+            'created_by' => $this->admin()->id,
+        ]);
+
+        $this->deleteJson(route('media.destroy', $media))->assertOk();
+        $this->assertDatabaseMissing('media_files', ['id' => $media->id]);
     }
 
     public function test_orphan_cleanup_removes_only_old_unreferenced_media(): void
@@ -247,10 +279,13 @@ class MediaTest extends TestCase
         $signed = app(MediaUrlResolver::class)->forSend($remote);
 
         // Fake disk signs via expiration; real S3/R2 SDKs use X-Amz-Signature.
+        // Either way the storage credentials must never appear in the URL.
         $this->assertTrue(
             str_contains($signed, 'X-Amz-Signature') || str_contains($signed, 'expiration='),
             'Expected a signed URL.',
         );
+        $this->assertStringNotContainsString('AKIA-PROBE-KEY-1234', $signed);
+        $this->assertStringNotContainsString('probe-secret-value-5678', $signed);
     }
 
     public function test_send_and_preview_urls_are_null_when_storage_is_disabled(): void
@@ -275,35 +310,19 @@ class MediaTest extends TestCase
         $this->assertNull($resolver->forPreview($media), 'UI renders a placeholder instead of a broken URL.');
     }
 
-    public function test_storage_probe_cleans_up_even_when_fetch_fails(): void
-    {
-        $this->configureS3Credentials();
-        Storage::fake('s3');
-        $this->actingAs($this->admin());
-
-        Http::fake([
-            '*' => Http::response('gateway unreachable', 502),
-        ]);
-
-        $response = $this->postJson(route('media.test-storage'));
-
-        $response->assertOk();
-        $this->assertFalse($response->json('reachable'));
-
-        // The temporary probe object must be gone regardless of fetch result.
-        $remaining = collect(Storage::disk('s3')->allFiles())->filter(fn ($p) => str_starts_with($p, 'stories/'));
-        $this->assertCount(0, $remaining);
-        $this->assertDatabaseCount('media_files', 0);
-    }
-
     public function test_upload_returns_422_when_storage_write_fails(): void
     {
-        $this->configureS3Credentials();
-        $this->actingAs($this->admin());
-
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+        Storage::fake('s3');
         $disk = $this->mock(FilesystemAdapter::class);
         $disk->shouldReceive('put')->andReturn(false);
-        Storage::shouldReceive('disk')->with('s3')->andReturn($disk);
+        $this->app->instance(
+            MediaStorage::class,
+            new MediaStorage(fn () => $disk),
+        );
+        $this->actingAs($this->admin());
 
         $this->postJson(route('media.store'), ['file' => $this->jpeg()])
             ->assertStatus(422)
@@ -312,22 +331,13 @@ class MediaTest extends TestCase
         $this->assertDatabaseCount('media_files', 0);
     }
 
-    public function test_storage_probe_reports_unconfigured_s3_as_unreachable(): void
+    public function test_old_storage_probe_route_is_removed(): void
     {
-        config([
-            'filesystems.disks.s3.key' => null,
-            'filesystems.disks.s3.secret' => null,
-            'filesystems.disks.s3.bucket' => null,
-        ]);
         $this->actingAs($this->admin());
-        Http::preventStrayRequests();
 
-        // An unusable s3 disk must degrade to reachable=false instead of a
-        // fatal driver error; nothing is persisted.
-        $response = $this->postJson(route('media.test-storage'));
-
-        $response->assertOk();
-        $this->assertFalse($response->json('reachable'));
-        $this->assertDatabaseCount('media_files', 0);
+        // No POST route answers the old probe URL anymore: the URI only
+        // matches the DELETE media/{media} route, so Laravel answers 405
+        // (method not allowed) — the probe endpoint itself is gone.
+        $this->postJson('/media/test-storage')->assertMethodNotAllowed();
     }
 }

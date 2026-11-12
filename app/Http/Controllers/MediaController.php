@@ -5,13 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Broadcast;
 use App\Models\MediaFile;
 use App\Models\Story;
+use App\Services\Media\MediaStorage;
 use App\Services\Media\MediaUrlResolver;
-use App\Services\Media\S3Availability;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class MediaController extends Controller
@@ -24,7 +22,10 @@ class MediaController extends Controller
         'video/mp4' => 'mp4',
     ];
 
-    public function __construct(private readonly MediaUrlResolver $urls) {}
+    public function __construct(
+        private readonly MediaUrlResolver $urls,
+        private readonly MediaStorage $storage,
+    ) {}
 
     /**
      * Upload media. Validation trusts content detection on the server, never
@@ -49,9 +50,11 @@ class MediaController extends Controller
         }
 
         // WAHA downloads media itself, so uploads are S3-only: without a
-        // reachable bucket there is no URL WAHA could fetch.
-        if (! S3Availability::configured()) {
-            return $this->uploadFailure('file', 'S3 storage is not configured. Set the AWS_* environment variables (any S3-compatible bucket or R2) before uploading media.');
+        // reachable bucket there is no URL WAHA could fetch. The gate reads
+        // the storage row, so disabling storage in Settings blocks uploads
+        // immediately.
+        if (! $this->storage->configured()) {
+            return $this->uploadFailure('file', 'S3 storage is disabled or not configured. Enable and configure it in Settings → Storage & auto-cleanup.');
         }
 
         $diskName = 's3';
@@ -63,12 +66,12 @@ class MediaController extends Controller
             self::ACCEPTED_MIME_EXTENSIONS[$mime],
         );
 
-        // Disks are configured with throw=false, so a failed write is only
+        // Disks are built with throw=false, so a failed write is only
         // visible through the return value — surface it instead of silently
         // creating a media row whose bytes never landed. Resolution itself
-        // can also throw (driver missing); that must be a friendly 422 too.
+        // can also throw (row not configured); that must be a friendly 422 too.
         try {
-            $stored = Storage::disk($diskName)->put($path, $file->getContent());
+            $stored = $this->storage->diskFor($diskName)->put($path, $file->getContent());
         } catch (\Throwable) {
             $stored = false;
         }
@@ -111,61 +114,10 @@ class MediaController extends Controller
             return response()->json(['message' => 'Media is referenced by a story or broadcast and cannot be deleted.'], 409);
         }
 
-        Storage::disk($media->disk)->delete($media->path);
+        $this->storage->diskFor($media->disk)->delete($media->path);
         $media->delete();
 
         return response()->json(['deleted' => true]);
-    }
-
-    /**
-     * Storage probe: write a tiny object to the s3 disk, fetch it from the
-     * backend with a short timeout, then always clean up (spec H.6). Backend
-     * reachability is NOT proof that the WAHA network can reach the URL. An
-     * unusable s3 disk (adapter missing, credentials empty) reports
-     * unreachable instead of a fatal driver error.
-     */
-    public function testStorage(Request $request): JsonResponse
-    {
-        $path = 'stories/probe-'.Str::uuid().'.txt';
-        $url = null;
-        $disk = null;
-
-        try {
-            $disk = Storage::disk('s3');
-            $disk->put($path, 'wahabuddy storage probe');
-
-            $probe = new MediaFile([
-                'disk' => 's3',
-                'path' => $path,
-                'original_name' => basename($path),
-                'mime_type' => 'text/plain',
-                'size_bytes' => 22,
-                'created_by' => $request->user()->id,
-            ]);
-            $url = $this->urls->forPreview($probe);
-
-            $response = Http::timeout(5)->get($url);
-            $reachable = $response->successful() && trim($response->body()) === 'wahabuddy storage probe';
-            $status = $response->status();
-        } catch (\Throwable) {
-            $reachable = false;
-            $status = null;
-        } finally {
-            if ($disk !== null) {
-                try {
-                    $disk->delete($path);
-                } catch (\Throwable) {
-                    // Best effort cleanup; the probe object is tiny.
-                }
-            }
-        }
-
-        return response()->json([
-            'reachable' => $reachable,
-            'status' => $status,
-            'url' => $reachable ? $url : null,
-            'note' => 'A successful backend fetch does not prove the URL is reachable from the WAHA container network; run an end-to-end story test to confirm.',
-        ]);
     }
 
     /**

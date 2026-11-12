@@ -67,7 +67,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('media', [MediaController::class, 'store'])->middleware('throttle:10,1')->name('media.store');
     Route::delete('media/{media}', [MediaController::class, 'destroy'])->middleware('throttle:20,1')->name('media.destroy');
-    Route::post('media/test-storage', [MediaController::class, 'testStorage'])->middleware('throttle:5,1')->name('media.test-storage');
 
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings/connection', [ConnectionController::class, 'update'])
