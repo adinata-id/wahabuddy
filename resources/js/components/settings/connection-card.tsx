@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useForm, router } from '@inertiajs/react';
-import { HardDrive, PlugZap, ShieldAlert } from 'lucide-react';
+import { PlugZap, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/confirm-dialog';
 import InputError from '@/components/input-error';
@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { postJson } from '@/lib/http';
 import { test as testRoute } from '@/routes/settings/connection';
-import { testStorage as testStorageRoute } from '@/routes/media';
 import { update as updateRoute } from '@/routes/settings/connection';
 import { clearApiKey as clearApiKeyRoute } from '@/routes/settings/connection';
 import { clearBasicAuth as clearBasicAuthRoute } from '@/routes/settings/connection';
@@ -38,7 +37,6 @@ export function ConnectionCard({
 }) {
     const [check, setCheck] = useState<ConnectionCheckResult | null>(null);
     const [testing, setTesting] = useState(false);
-    const [testingStorage, setTestingStorage] = useState(false);
     const [clearing, setClearing] = useState<PendingClear | null>(null);
     const [clearingBusy, setClearingBusy] = useState(false);
 
@@ -70,30 +68,6 @@ export function ConnectionCard({
             toast.error('Connection test could not be completed.');
         } finally {
             setTesting(false);
-        }
-    };
-
-    const runStorageTest = async () => {
-        setTestingStorage(true);
-
-        try {
-            const result = await postJson<{
-                reachable: boolean;
-                status: number | null;
-                note: string;
-            }>(testStorageRoute.url());
-
-            if (result.reachable) {
-                toast.success('Storage probe passed (from this backend only).');
-            } else {
-                toast.error(
-                    `Storage probe failed${result.status ? ` (HTTP ${result.status})` : ''}.`,
-                );
-            }
-        } catch {
-            toast.error('Storage probe could not be completed.');
-        } finally {
-            setTestingStorage(false);
         }
     };
 
@@ -259,19 +233,6 @@ export function ConnectionCard({
                         >
                             {testing && <Spinner />}
                             Test connection
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={testingStorage}
-                            onClick={runStorageTest}
-                        >
-                            {testingStorage ? (
-                                <Spinner />
-                            ) : (
-                                <HardDrive className="size-4" />
-                            )}
-                            Test storage
                         </Button>
                         {connection.has_basic_password && (
                             <Button

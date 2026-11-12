@@ -44,7 +44,7 @@ npm run build
 
 cp .env.example .env
 php artisan key:generate --ansi      # FIRST INSTALLATION ONLY
-$EDITOR .env                         # APP_URL, DB_*, AWS_* (required for media upload)
+$EDITOR .env                         # APP_URL, DB_* (media storage is configured in Settings → Storage)
 php artisan migrate --force
 php artisan storage:link             # only serves media left over from the removed local-disk mode
 php artisan wahabuddy:admin          # interactive admin creation (hidden password)
@@ -53,12 +53,25 @@ chown -R www-data:www-data storage bootstrap/cache
 ```
 
 Media storage is **S3-only**: WAHA downloads image/video files itself, so
-uploads are handed to WAHA as short-lived presigned URLs. Fill the `AWS_*`
-block with any S3-compatible bucket (e.g. Cloudflare R2) and use the
-**Test storage** button on the Settings page (a backend fetch still
-doesn't prove WAHA can reach it). Local-disk media is not supported; files
-left over from the removed local-disk mode stay previewable but can no
-longer be sent — re-upload them.
+uploads are handed to WAHA as short-lived presigned URLs. Configure any
+S3-compatible bucket (e.g. Cloudflare R2: account endpoint, region `auto`,
+path-style) under **Settings → Storage & auto-cleanup** — the credentials
+are stored encrypted in the database and no `.env` edit or process restart
+is needed. Use the **Test storage** button there to verify (a backend fetch
+still doesn't prove WAHA can reach it — run an end-to-end story test).
+Local-disk media is not supported; files left over from the removed
+local-disk mode stay previewable but can no longer be sent — re-upload
+them.
+
+The optional `AWS_*` block in `.env` seeds the Settings → Storage row on
+first run only. Installs that already have `AWS_*` filled auto-seed an
+**enabled** row on first read (zero action); installs without it start
+disabled and are configured entirely from the Settings page. `APP_KEY`
+must remain stable — the stored credentials are encrypted with it (the
+same requirement as the stored WAHA credentials). Rolling the code back to
+the env-only gate re-enables the `AWS_*` requirement until those variables
+are restored, and `migrate:rollback` deletes the stored (encrypted)
+credentials — re-enter them from Settings after rolling forward again.
 
 ### Deploy/update
 

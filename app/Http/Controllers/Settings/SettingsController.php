@@ -9,7 +9,6 @@ use App\Models\MediaFile;
 use App\Models\S3Connection;
 use App\Models\WahaConnection;
 use App\Services\Media\MediaStorage;
-use App\Services\Media\S3Availability;
 use App\Services\Media\SentMediaCleanup;
 use App\Services\Waha\CapabilityResolver;
 use App\Services\Waha\ConnectionRepository;
@@ -98,10 +97,6 @@ class SettingsController extends Controller
                 'bytes' => (int) (clone $eligible)->sum('size_bytes'),
             ],
             'disk_usage' => $diskUsage,
-            'capabilities' => [
-                's3_adapter_installed' => S3Availability::adapterInstalled(),
-                's3_credentials_present' => S3Availability::credentialsConfigured(),
-            ],
             'recent_runs' => $recentRuns,
         ];
     }

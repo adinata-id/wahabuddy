@@ -110,7 +110,10 @@ class StorageController extends Controller
 
         $diskConfig = array_filter([
             'driver' => 's3',
-            'key' => $input['key'] ?? null,
+            // Blank key/secret falls back to the stored value: the browser
+            // never receives them, so an untouched form means "the saved
+            // credentials" (mirror of secret; spec D2).
+            'key' => filled($input['key'] ?? null) ? $input['key'] : $this->plainAttribute($row, 'key'),
             'secret' => filled($input['secret'] ?? null) ? $input['secret'] : $this->plainAttribute($row, 'secret'),
             'bucket' => $input['bucket'] ?? null,
             'region' => filled($input['region'] ?? null) ? $input['region'] : 'auto',

@@ -14,7 +14,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use Tests\TestCase;
 
 /**
@@ -179,7 +178,9 @@ class StorageSettingsTest extends TestCase
                 ->where('storage.cleanup.retention_days', 3)
                 ->where('storage.estimate.files', 1)
                 ->where('storage.estimate.bytes', 250)
-                ->where('storage.capabilities.s3_adapter_installed', class_exists(AwsS3V3Adapter::class))
+                ->where('storage', fn ($storage) => collect($storage)->keys()
+                    ->doesntContain('capabilities')
+                    && collect($storage)->keys()->contains('connection'))
                 ->where('storage.disk_usage', fn ($usage) => collect($usage)->contains(
                     fn ($row) => $row['disk'] === 'public' && (int) $row['files'] === 1 && (int) $row['bytes'] === 250,
                 ))
@@ -418,6 +419,32 @@ class StorageSettingsTest extends TestCase
         $response = $this->postJson(route('settings.storage.test'), $this->s3FormPayload(['secret' => '']));
 
         $response->assertOk()->assertJsonPath('reachable', true)->assertJsonPath('persisted', true);
+        $row = S3Connection::singleton()->refresh();
+        $this->assertSame('passed', $row->last_test_status);
+        $this->assertNotNull($row->last_test_at);
+    }
+
+    public function test_probe_falls_back_to_stored_key_when_form_key_blank(): void
+    {
+        $this->actingAs($this->admin());
+        $this->advanceThrottleWindow();
+        $this->swapMediaStorageWithFake();
+
+        // The UI never receives the stored key; an untouched form (blank
+        // key AND blank secret) must probe the SAVED credentials, so the
+        // resolved config hash-matches the row and the result persists.
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'stored-key', 'secret' => 'stored-secret', 'bucket' => 'form-bucket',
+            'endpoint' => null, 'use_path_style_endpoint' => true,
+        ])->save();
+
+        Http::fake(['*' => Http::response('wahabuddy storage probe', 200)]);
+
+        $this->postJson(route('settings.storage.test'), $this->s3FormPayload(['key' => null, 'secret' => '']))
+            ->assertOk()
+            ->assertJsonPath('reachable', true)
+            ->assertJsonPath('persisted', true);
+
         $row = S3Connection::singleton()->refresh();
         $this->assertSame('passed', $row->last_test_status);
         $this->assertNotNull($row->last_test_at);

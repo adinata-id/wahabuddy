@@ -47,7 +47,7 @@ npm ci && npm run build
 
 cp .env.example .env
 php artisan key:generate --ansi     # FIRST INSTALLATION ONLY — keep APP_KEY stable
-# edit .env: APP_URL, DB_*, AWS_* (S3-compatible bucket — required for media upload)
+# edit .env: APP_URL, DB_* (S3/R2 media storage is configured later in Settings → Storage)
 
 php artisan migrate --force
 php artisan storage:link            # only serves media left over from the removed local-disk mode

@@ -127,8 +127,9 @@ Contoh payload, nilai semuanya placeholder:
 
 Infrastructure ada di `.env`; pengaturan operasional WAHA ada di database dan dapat diubah lewat Settings tanpa rebuild.
 
-- `.env`: `APP_URL`, `APP_KEY`, database/cache/queue, timezone default, serta credentials `AWS_*` (wajib untuk upload media).
+- `.env`: `APP_URL`, `APP_KEY`, database/cache/queue, timezone default. Kredensial media `AWS_*` hanya men-seed baris Settings → Storage saat baca pertama; setelah itu sumber kebenarannya DB.
 - DB singleton `waha_connections` menyimpan base URL, API key encrypted, optional Basic credentials encrypted, session, revision integer, capability metadata, dan hasil test terakhir yang sudah disanitasi.
+- DB singleton `s3_connections` menyimpan kredensial S3/R2 terenkripsi (key, secret, bucket, region, endpoint, path-style, toggle enabled, hasil test terakhir yang terikat configHash) — dikonfigurasi, diuji, dan diaktifkan dari Settings → Storage tanpa menyentuh `.env` dan tanpa restart proses. Secret tidak pernah dikirim ke browser; hanya `has_*` + hint masked.
 - DB singleton `app_settings` menyimpan display timezone, delay broadcast min/max, batch size dan pause. Satu baris per instalasi, bukan tabel “single-row key-value” yang kontradiktif.
 - Default koneksi kosong; session default `default` boleh sebagai saran, tetapi harus dipilih/divalidasi. Jangan isi host atau session privat.
 - Optional `WAHA_BASE_URL`, `WAHA_API_KEY`, `WAHA_SESSION` hanya untuk import awal lewat command setup eksplisit; tidak diam-diam mengalahkan nilai DB. Jangan menaruh `env()` di service domain.
@@ -220,12 +221,12 @@ failed_max -> pending          // admin membuka siklus retry baru, tercatat
 
 ## H. Media dan storage
 
-1. Media storage S3-only: WAHA mengunduh media sendiri, jadi local disk (yang butuh base URL publik/tunnel) tidak didukung. Upload ditolak dengan pesan jelas selama bucket `AWS_*` belum dikonfigurasi. Simpan `stories/YYYY/MM/{uuid}.{safe_extension}` melalui Laravel Storage pada disk `s3`. File lama peninggalan mode local disk tetap bisa dipreview lewat URL app dan tetap dibersihkan cleanup, tetapi tidak bisa dikirim lagi — upload ulang.
-2. S3-compatible/R2 dikonfigurasi lewat `.env`. R2 memakai endpoint akun, region auto, serta presigned GET URL. Jangan mengandalkan ACL `public-read` yang belum tentu didukung R2; akses publik dikonfigurasi pada bucket/domain.
+1. Media storage S3-only: WAHA mengunduh media sendiri, jadi local disk (yang butuh base URL publik/tunnel) tidak didukung. Upload ditolak dengan pesan jelas selama kredensial S3 belum dikonfigurasi (Settings → Storage). Simpan `stories/YYYY/MM/{uuid}.{safe_extension}` melalui Laravel Storage pada disk `s3`. File lama peninggalan mode local disk tetap bisa dipreview lewat URL app dan tetap dibersihkan cleanup, tetapi tidak bisa dikirim lagi — upload ulang.
+2. S3-compatible/R2 dikonfigurasi dari Settings → Storage (disimpan terenkripsi di tabel `s3_connections`; env `AWS_*` hanya seed awal). R2 memakai endpoint akun, region auto, serta presigned GET URL. Jangan mengandalkan ACL `public-read` yang belum tentu didukung R2; akses publik dikonfigurasi pada bucket/domain.
 3. Presigned URL dibuat sesaat sebelum HTTP send, berlaku 15 menit, tidak disimpan/log. Bucket private + signed URL menjaga privasi media.
 4. Maksimum 50 MiB (52.428.800 byte; Laravel max 51200 KiB), validasi ukuran serta MIME hasil deteksi server, bukan ekstensi dari browser. V1 menerima JPEG/PNG/WebP image serta MP4 video yang memenuhi format bagian D2. Format lain ditolak dengan pesan yang jelas; tidak perlu transcode lokal.
 5. Media upload boleh langsung sebelum story dibuat; bersihkan orphan berumur >24 jam hanya jika tidak direferensikan story/campaign. Media yang dipakai unknown/sending tidak boleh dihapus.
-6. Tombol Test Storage membuat object sementara, memeriksa URL dari backend dengan timeout singkat, lalu menghapusnya di finally. Jelaskan bahwa backend fetch sukses belum membuktikan reachability dari jaringan WAHA; uji end-to-end tetap diperlukan.
+6. Tombol Test Storage menguji nilai form (termasuk yang belum disimpan), membuat object sementara, memeriksa URL dari backend dengan timeout singkat, lalu menghapusnya di finally; hasil hanya dipersist bila nilai form identik dengan config tersimpan (configHash). Jelaskan bahwa backend fetch sukses belum membuktikan reachability dari jaringan WAHA; uji end-to-end tetap diperlukan.
 7. Jangan menerima arbitrary media URL dari pengguna dalam v1. URL untuk WAHA hanya dihasilkan dari disk/path terpercaya. Jangan mengirim cookie atau API key WAHA ketika menguji URL media.
 8. Samakan batas PHP `upload_max_filesize`/`post_max_size` dan reverse proxy dengan batas aplikasi, dengan ruang overhead multipart. Jangan menjanjikan upload 50 MiB jika proxy menolak lebih dulu.
 

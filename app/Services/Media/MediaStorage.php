@@ -80,7 +80,7 @@ final class MediaStorage
 
         $hash = S3Connection::configHashFor($config);
 
-        return self::$adapterCache[$hash] ??= Storage::build($config);
+        return self::$adapterCache[$hash] ??= $this->buildAdapter($config);
     }
 
     /**
@@ -96,7 +96,26 @@ final class MediaStorage
             return ($this->adapterFactory)($diskConfig);
         }
 
-        return Storage::build($diskConfig);
+        return $this->buildAdapter($diskConfig);
+    }
+
+    /**
+     * Storage::build() is declared as the Filesystem contract but the
+     * standard driver path always yields a FilesystemAdapter. A custom
+     * creator (Storage::extend) could return anything else — guard that
+     * invariant once, here, for both the cache and the probe path.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function buildAdapter(array $config): FilesystemAdapter
+    {
+        $adapter = Storage::build($config);
+
+        if (! $adapter instanceof FilesystemAdapter) {
+            throw new MediaStorageException('The storage driver did not produce a filesystem adapter.');
+        }
+
+        return $adapter;
     }
 
     /**

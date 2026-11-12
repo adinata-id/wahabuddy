@@ -26,19 +26,21 @@
 ### Task 1: `s3_connections` table + `S3Connection` model
 
 **Files:**
+
 - Create: `database/migrations/2026_11_11_100000_create_s3_connections_table.php` (via `php artisan make:migration create_s3_connections_table --create=s3_connections --no-interaction`)
 - Create: `app/Models/S3Connection.php`
 - Modify: `phpunit.xml` (neutralize `AWS_*` — the developer's real `.env` carries live credentials, and `S3Connection::singleton()` seeds from them)
 - Test: `tests/Feature/S3ConnectionTest.php` (via `php artisan make:test --phpunit S3ConnectionTest --no-interaction`)
 
 **Interfaces:**
+
 - Consumes: `config('filesystems.disks.s3')` (env `AWS_*` values), pattern `App\Models\WahaConnection`.
 - Produces (used by Tasks 2, 3, 4, 5, 6, 7):
-  - `S3Connection::singleton(): self`
-  - `S3Connection::isConfigured(): bool`
-  - `S3Connection::toDiskConfig(): array` (keys `driver,key,secret,bucket,region,endpoint,use_path_style_endpoint,throw`)
-  - `S3Connection::configHash(): string`, `S3Connection::configHashFor(array $diskConfig): string`
-  - properties `enabled,key,secret,bucket,region,endpoint,use_path_style_endpoint,last_test_at,last_test_status,last_test_error`
+    - `S3Connection::singleton(): self`
+    - `S3Connection::isConfigured(): bool`
+    - `S3Connection::toDiskConfig(): array` (keys `driver,key,secret,bucket,region,endpoint,use_path_style_endpoint,throw`)
+    - `S3Connection::configHash(): string`, `S3Connection::configHashFor(array $diskConfig): string`
+    - properties `enabled,key,secret,bucket,region,endpoint,use_path_style_endpoint,last_test_at,last_test_status,last_test_error`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -133,7 +135,7 @@ class S3ConnectionTest extends TestCase
 }
 ```
 
-- [ ] **Step 1b: Neutralize AWS_* in the test environment**
+- [ ] _*Step 1b: Neutralize AWS\_* in the test environment_*
 
 In `phpunit.xml`, inside `<php>` next to the existing `DB_*` entries, add:
 
@@ -350,6 +352,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 2: `MediaStorage` service + test helper
 
 **Files:**
+
 - Create: `app/Services/Media/MediaStorage.php`
 - Create: `app/Services/Media/MediaStorageException.php` (small `RuntimeException` subclass)
 - Delete: nothing yet (`S3Availability` dies in Task 6)
@@ -357,14 +360,15 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Test: `tests/Feature/MediaStorageTest.php`
 
 **Interfaces:**
+
 - Consumes: `S3Connection::singleton()/isConfigured()/toDiskConfig()/configHashFor()` (Task 1).
 - Produces (used by Tasks 3, 4, 5, 6, 7):
-  - `MediaStorage::row(): S3Connection`
-  - `MediaStorage::configured(): bool`
-  - `MediaStorage::credentialsUnreadable(): bool`
-  - `MediaStorage::diskFor(string $disk): Illuminate\Filesystem\FilesystemAdapter`
-  - `MediaStorage::buildFor(array $diskConfig): Illuminate\Filesystem\FilesystemAdapter`
-  - `TestCase::swapMediaStorageWithFake(string $disk = 's3'): void`
+    - `MediaStorage::row(): S3Connection`
+    - `MediaStorage::configured(): bool`
+    - `MediaStorage::credentialsUnreadable(): bool`
+    - `MediaStorage::diskFor(string $disk): Illuminate\Filesystem\FilesystemAdapter`
+    - `MediaStorage::buildFor(array $diskConfig): Illuminate\Filesystem\FilesystemAdapter`
+    - `TestCase::swapMediaStorageWithFake(string $disk = 's3'): void`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -643,6 +647,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 3: Save + clear-secret endpoints, connection props
 
 **Files:**
+
 - Create: `app/Rules/StorageEndpointUrl.php`
 - Create: `app/Http/Requests/Settings/UpdateStorageSettingsRequest.php`
 - Modify: `app/Http/Controllers/Settings/StorageController.php`
@@ -651,10 +656,11 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Test: `tests/Feature/StorageSettingsTest.php` (extend)
 
 **Interfaces:**
+
 - Consumes: `S3Connection::*` (Task 1), `MediaStorage::row()/configured()/credentialsUnreadable()` (Task 2), `WahaUrl::normalize()` (host guard), `SettingsController::maskHint()`.
 - Produces:
-  - Routes `settings.storage.update` (PUT `settings/storage`), `settings.storage.clear-secret` (DELETE `settings/storage/secret`).
-  - `SettingsController::storageConnectionProps(S3Connection $row, MediaStorage $storage): array` with keys `enabled, has_key, has_secret, key_hint, bucket, region, endpoint, use_path_style_endpoint, configured, credentials_unreadable, last_test` — used by the settings page (Task 8 UI) and by `update()`'s redirect payload.
+    - Routes `settings.storage.update` (PUT `settings/storage`), `settings.storage.clear-secret` (DELETE `settings/storage/secret`).
+    - `SettingsController::storageConnectionProps(S3Connection $row, MediaStorage $storage): array` with keys `enabled, has_key, has_secret, key_hint, bucket, region, endpoint, use_path_style_endpoint, configured, credentials_unreadable, last_test` — used by the settings page (Task 8 UI) and by `update()`'s redirect payload.
 
 - [ ] **Step 1: Write the failing tests** (append to `tests/Feature/StorageSettingsTest.php`)
 
@@ -1041,12 +1047,14 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 4: Storage test endpoint (unsaved form values)
 
 **Files:**
+
 - Create: `app/Http/Requests/Settings/TestStorageSettingsRequest.php`
 - Modify: `app/Http/Controllers/Settings/StorageController.php` (add `test`)
 - Modify: `routes/web.php` (one route)
 - Test: `tests/Feature/StorageSettingsTest.php` (extend)
 
 **Interfaces:**
+
 - Consumes: `MediaStorage::buildFor()/row()` (Task 2), `S3Connection::configHashFor()/configHash()` (Task 1), route name `settings.storage.test`.
 - Produces: `POST settings/storage/test` → JSON `{reachable: bool, status: int|null, persisted: bool, note: string}`; persists `last_test_*` only when the resolved form hash matches the saved row.
 
@@ -1287,6 +1295,7 @@ use Illuminate\Support\Str;
 ```
 
 Notes:
+
 - `withoutRedirecting()` is the method name in the installed framework (`withoutRedirects()` does not exist and would be swallowed by the catch as a probe failure).
 - Reuse `plainAttribute()`/`safeConfigHash()` from Task 3 (`plainSecret` is replaced by it). Delete `plainSecret` if Task 4's earlier draft introduced it.
 - Error classification: `fetch_failed` for non-2xx, `content_mismatch` only for 2xx-with-wrong-bytes.
@@ -1320,11 +1329,13 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 5: `MediaUrlResolver` on `MediaStorage` + disabled-variant messages
 
 **Files:**
+
 - Modify: `app/Services/Media/MediaUrlResolver.php`
 - Modify: `app/Jobs/SendStoryJob.php`, `app/Jobs/ProcessBroadcastJob.php`, `app/Actions/Broadcasts/CompleteRecipient.php` (disabled-variant messages only)
 - Test: `tests/Feature/MediaTest.php`, `tests/Feature/StorySchedulerTest.php`, `tests/Feature/BroadcastTest.php` (extend)
 
 **Interfaces:**
+
 - Consumes: `MediaStorage::configured()/diskFor('s3')` (Task 2), `swapMediaStorageWithFake()` (Task 2).
 - Produces (unchanged public API): `MediaUrlResolver::forSend(MediaFile): ?string`, `forPreview(MediaFile): ?string`. Constructor now takes `MediaStorage` (container-resolved; no call-site changes).
 
@@ -1497,6 +1508,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 6: Upload/destroy gate, remove old probe + `S3Availability`
 
 **Files:**
+
 - Modify: `app/Http/Controllers/MediaController.php` (store gate via `MediaStorage`; delete `testStorage`)
 - Delete: `app/Services/Media/S3Availability.php`
 - Modify: `app/Http/Controllers/Settings/SettingsController.php` (capabilities from the row, until Task 8 removes them)
@@ -1504,6 +1516,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Test: `tests/Feature/MediaTest.php` (rework)
 
 **Interfaces:**
+
 - Consumes: `MediaStorage::configured()/diskFor('s3')` (Task 2), `swapMediaStorageWithFake()`.
 - Produces: upload path fully on `MediaStorage`; old endpoint gone (Task 8 UI uses `settings.storage.test`).
 
@@ -1629,12 +1642,14 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 7: Per-disk disable semantics in cleanup + destroy
 
 **Files:**
+
 - Modify: `app/Services/Media/SentMediaCleanup.php` (constructor-inject `MediaStorage`)
 - Modify: `app/Console/Commands/PruneOrphanMedia.php`
 - Modify: `app/Http/Controllers/MediaController.php` (`destroy`)
 - Test: `tests/Feature/MediaCleanupTest.php`, `tests/Feature/MediaTest.php` (extend)
 
 **Interfaces:**
+
 - Consumes: `MediaStorage::configured()/diskFor()` (Task 2).
 - Produces: behavior only — `purge(): bool` skips `disk='s3'` rows when `!configured()`; orphan prune skips (keeps row + bytes); `destroy` returns 409 for those rows.
 
@@ -1809,6 +1824,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ### Task 8: Settings UI, types, docs, full verification
 
 **Files:**
+
 - Modify: `resources/js/components/settings/storage-card.tsx`
 - Modify: `resources/js/components/settings/connection-card.tsx` (it imports the deleted `media/test-storage` route — cleanup mandatory or tsc fails)
 - Modify: `resources/js/types/wahabuddy.ts`
@@ -1817,6 +1833,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Regenerate: `php artisan wayfinder:generate --no-interaction`, `npm run build`
 
 **Interfaces:**
+
 - Consumes: `storage.connection` props (Task 3), routes `settings.storage.update/test/clear-secret` (Tasks 3–4).
 - Produces: final UI; docs updated; no `capabilities` in props/types.
 
@@ -1834,12 +1851,16 @@ export type StorageConnection = {
     use_path_style_endpoint: boolean;
     configured: boolean;
     credentials_unreadable: boolean;
-    last_test: { at: string; status: string | null; error: string | null } | null;
+    last_test: {
+        at: string;
+        status: string | null;
+        error: string | null;
+    } | null;
 };
 
 export type StorageSettings = {
     connection: StorageConnection;
-    cleanup: { /* unchanged */ };
+    cleanup: {/* unchanged */};
     // ...rest unchanged
 };
 ```
@@ -1871,7 +1892,7 @@ Expected: all pass with ZERO new errors (baseline is zero after the 2026-11-11 r
 
 - `.env.example` AWS block comment → `# Seeds Settings -> Storage on first run only; the database is the source of truth afterwards. Keep these until the install runs stably on DB-based storage.`
 - `README.md` quick start: `# edit .env: APP_URL, DB_* (S3/R2 media is configured later in Settings → Storage)`; drop the `storage:link` "removed local-disk mode" wording if desired — keep the line itself (legacy previews).
-- `docs/deployment.md`: replace the "Media storage is S3-only" paragraph's env instructions with Settings-page instructions; add the rollback note from spec 3.7 AND the upgrade-path paragraph: *installs with `AWS_*` already filled auto-seed an enabled row on first read (zero action); installs without them configure everything from Settings → Storage; `APP_KEY` must remain stable — the credentials are encrypted with it (same requirement as the stored WAHA credentials).*
+- `docs/deployment.md`: replace the "Media storage is S3-only" paragraph's env instructions with Settings-page instructions; add the rollback note from spec 3.7 AND the upgrade-path paragraph: _installs with `AWS_*` already filled auto-seed an enabled row on first read (zero action); installs without them configure everything from Settings → Storage; `APP_KEY` must remain stable — the credentials are encrypted with it (same requirement as the stored WAHA credentials)._
 - `docs/wahabuddy-spec.md` sections E & H: credentials live encrypted in `s3_connections`; env `AWS_*` seeds only; test results bind to `configHash`.
 
 - [ ] **Step 7: Full verification gate**

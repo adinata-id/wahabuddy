@@ -45,7 +45,26 @@ export type MediaCleanupRunSummary = {
     finished_at: string | null;
 };
 
+export type StorageConnection = {
+    enabled: boolean;
+    has_key: boolean;
+    has_secret: boolean;
+    key_hint: string | null;
+    bucket: string | null;
+    region: string;
+    endpoint: string | null;
+    use_path_style_endpoint: boolean;
+    configured: boolean;
+    credentials_unreadable: boolean;
+    last_test: {
+        at: string;
+        status: string | null;
+        error: string | null;
+    } | null;
+};
+
 export type StorageSettings = {
+    connection: StorageConnection;
     cleanup: {
         enabled: boolean;
         frequency: 'daily' | 'weekly' | 'monthly' | 'custom';
@@ -58,10 +77,6 @@ export type StorageSettings = {
     };
     estimate: { files: number; bytes: number };
     disk_usage: { disk: string; files: number; bytes: number }[];
-    capabilities: {
-        s3_adapter_installed: boolean;
-        s3_credentials_present: boolean;
-    };
     recent_runs: MediaCleanupRunSummary[];
 };
 
