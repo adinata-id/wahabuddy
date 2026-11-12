@@ -141,9 +141,12 @@ export function ConnectionCard({
                         />
                         <InputError message={form.errors.base_url} />
                         <p className="text-xs text-muted-foreground">
-                            Origin plus optional path prefix, no trailing slash.
-                            WAHA must be able to reach this app&apos;s media
-                            URLs from its own network.
+                            Your WAHA server&apos;s address (not this app&apos;s
+                            own domain), e.g. http://localhost:3000 or
+                            https://waha.example.com. Origin plus optional path
+                            prefix, no trailing slash. WAHA must be able to
+                            reach this app&apos;s media URLs from its own
+                            network.
                         </p>
                     </div>
 
