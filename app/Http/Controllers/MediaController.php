@@ -114,6 +114,12 @@ class MediaController extends Controller
             return response()->json(['message' => 'Media is referenced by a story or broadcast and cannot be deleted.'], 409);
         }
 
+        // Disable semantics are per-row (spec D3): only s3 rows are blocked
+        // while storage is disabled — legacy public rows stay deletable.
+        if ($media->disk === 's3' && ! $this->storage->configured()) {
+            return response()->json(['message' => 'Storage is disabled; the file cannot be removed right now.'], 409);
+        }
+
         $this->storage->diskFor($media->disk)->delete($media->path);
         $media->delete();
 

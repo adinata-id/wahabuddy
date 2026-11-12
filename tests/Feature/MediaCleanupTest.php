@@ -8,6 +8,7 @@ use App\Models\AppSetting;
 use App\Models\Broadcast;
 use App\Models\MediaCleanupRun;
 use App\Models\MediaFile;
+use App\Models\S3Connection;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaUrlResolver;
@@ -80,6 +81,36 @@ class MediaCleanupTest extends TestCase
         }
 
         return $broadcast;
+    }
+
+    /**
+     * A purge-eligible media row on the given disk with real fake-disk bytes.
+     */
+    private function eligibleMediaOnDisk(string $disk): MediaFile
+    {
+        Storage::fake($disk);
+        Storage::disk($disk)->put("stories/2026/11/{$disk}.jpg", 'x');
+
+        $media = MediaFile::create([
+            'disk' => $disk,
+            'path' => "stories/2026/11/{$disk}.jpg",
+            'original_name' => "{$disk}.jpg",
+            'mime_type' => 'image/jpeg',
+            'size_bytes' => 1,
+            'created_by' => $this->admin()->id,
+        ]);
+
+        $story = Story::create([
+            'type' => 'image',
+            'media_file_id' => $media->id,
+            'scheduled_at' => now()->subDays(10),
+            'status' => StoryStatus::Sent,
+            'sent_at' => now()->subDays(10),
+            'connection_revision' => 1,
+        ]);
+        $story->forceFill(['updated_at' => now()->subDays(4)])->save();
+
+        return $media;
     }
 
     public function test_purges_storage_of_sent_media_past_retention_and_keeps_records(): void
@@ -207,6 +238,47 @@ class MediaCleanupTest extends TestCase
 
         Storage::disk('public')->assertExists('stories/2026/10/off.jpg');
         $this->assertDatabaseHas('media_files', ['id' => $media->id, 'purged_at' => null]);
+    }
+
+    public function test_sent_media_purge_skips_s3_rows_but_keeps_purging_public_rows_when_storage_is_disabled(): void
+    {
+        $this->swapMediaStorageWithFake();
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+
+        $s3Media = $this->eligibleMediaOnDisk('s3');
+        $publicMedia = $this->eligibleMediaOnDisk('public');
+
+        $this->assertFalse(app(SentMediaCleanup::class)->purge($s3Media));
+        $this->assertNull($s3Media->refresh()->purged_at, 'Toggle never deletes or tombstones S3 files (spec D3).');
+        Storage::disk('s3')->assertExists('stories/2026/11/s3.jpg');
+        $this->assertTrue(app(SentMediaCleanup::class)->purge($publicMedia));
+        $this->assertNotNull($publicMedia->refresh()->purged_at, 'Legacy public rows keep purging while storage is disabled.');
+    }
+
+    public function test_orphan_prune_skips_s3_rows_entirely_when_storage_is_disabled(): void
+    {
+        $this->swapMediaStorageWithFake();
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+
+        Storage::disk('s3')->put('stories/2026/11/orphan.jpg', 'x');
+
+        $orphan = MediaFile::create([
+            'disk' => 's3', 'path' => 'stories/2026/11/orphan.jpg', 'original_name' => 'orphan.jpg',
+            'mime_type' => 'image/jpeg', 'size_bytes' => 1, 'created_by' => $this->admin()->id,
+        ]);
+        $orphan->forceFill(['created_at' => now()->subDays(2)])->save();
+
+        $this->artisan('wahabuddy:prune-orphan-media')
+            ->assertSuccessful()
+            ->expectsOutputToContain('Removed 0 orphaned media file(s).');
+
+        // Row and bytes both survive for the next weekly run (spec D3).
+        $this->assertDatabaseHas('media_files', ['id' => $orphan->id]);
+        Storage::disk('s3')->assertExists('stories/2026/11/orphan.jpg');
     }
 
     public function test_skips_when_next_run_is_in_the_future(): void

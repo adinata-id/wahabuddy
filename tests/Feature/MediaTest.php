@@ -195,6 +195,45 @@ class MediaTest extends TestCase
         $this->assertDatabaseMissing('media_files', ['id' => $media->id]);
     }
 
+    public function test_destroy_refuses_s3_media_while_storage_is_disabled(): void
+    {
+        $this->swapMediaStorageWithFake();
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+        $this->actingAs($this->admin());
+
+        $media = MediaFile::create([
+            'disk' => 's3', 'path' => 'stories/2026/11/x.jpg', 'original_name' => 'x.jpg',
+            'mime_type' => 'image/jpeg', 'size_bytes' => 1, 'created_by' => $this->admin()->id,
+        ]);
+
+        $this->deleteJson(route('media.destroy', $media))->assertConflict();
+        $this->assertDatabaseHas('media_files', ['id' => $media->id]);
+    }
+
+    /**
+     * The other half of the disable gate: credentials missing AND the toggle
+     * off must produce the same 409 instead of an uncaught storage
+     * exception (spec D3).
+     */
+    public function test_destroy_refuses_s3_media_while_storage_is_disabled_with_blank_credentials(): void
+    {
+        $this->swapMediaStorageWithFake();
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => null, 'secret' => null, 'bucket' => null,
+        ])->save();
+        $this->actingAs($this->admin());
+
+        $media = MediaFile::create([
+            'disk' => 's3', 'path' => 'stories/2026/11/x.jpg', 'original_name' => 'x.jpg',
+            'mime_type' => 'image/jpeg', 'size_bytes' => 1, 'created_by' => $this->admin()->id,
+        ]);
+
+        $this->deleteJson(route('media.destroy', $media))->assertConflict();
+        $this->assertDatabaseHas('media_files', ['id' => $media->id]);
+    }
+
     public function test_orphan_cleanup_removes_only_old_unreferenced_media(): void
     {
         Storage::fake('public');

@@ -5,8 +5,8 @@ namespace App\Console\Commands;
 use App\Models\Broadcast;
 use App\Models\MediaFile;
 use App\Models\Story;
+use App\Services\Media\MediaStorage;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Removes uploaded media older than 24 hours that no story or broadcast
@@ -19,7 +19,7 @@ class PruneOrphanMedia extends Command
 
     protected $description = 'Delete orphaned media uploads older than the given age';
 
-    public function handle(): int
+    public function handle(MediaStorage $storage): int
     {
         $hours = max(1, (int) $this->option('hours'));
 
@@ -31,9 +31,16 @@ class PruneOrphanMedia extends Command
 
         MediaFile::where('created_at', '<', now()->subHours($hours))
             ->whereNotIn('id', $referenced->keys()->all())
-            ->chunkById(100, function ($chunk) use (&$removed) {
+            ->chunkById(100, function ($chunk) use ($storage, &$removed) {
                 foreach ($chunk as $media) {
-                    Storage::disk($media->disk)->delete($media->path);
+                    // Disable semantics are per-row (spec D3): skip the bytes
+                    // AND the row so the next weekly run retries once storage
+                    // is re-enabled (spec 3.5).
+                    if ($media->disk === 's3' && ! $storage->configured()) {
+                        continue;
+                    }
+
+                    $storage->diskFor($media->disk)->delete($media->path);
                     $media->delete();
                     $removed++;
                 }

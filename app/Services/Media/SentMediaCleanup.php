@@ -11,7 +11,6 @@ use App\Models\Story;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Decides which media storage may be purged and when the cleanup runs.
@@ -32,6 +31,8 @@ final class SentMediaCleanup
 
     /** A capped run drains the remainder this many minutes later. */
     public const CAP_RESCHEDULE_MINUTES = 15;
+
+    public function __construct(private readonly MediaStorage $storage) {}
 
     /**
      * Media whose storage can be purged right now under current settings.
@@ -85,6 +86,11 @@ final class SentMediaCleanup
      * Delete the stored object and tombstone the row. The row always
      * survives as history; only the bytes go.
      *
+     * Disable semantics are per-row (spec D3): while storage is disabled,
+     * only s3 rows are blocked — purge reports failure (feeding the run's
+     * files_failed accounting, purged_at stays null for the next run) and
+     * legacy public rows keep purging.
+     *
      * Disks are configured with throw=false, so the delete result is the
      * primary signal; only a false return needs the follow-up existence
      * check (distinguishing a real failure from an already-absent path,
@@ -95,8 +101,12 @@ final class SentMediaCleanup
      */
     public function purge(MediaFile $media): bool
     {
+        if ($media->disk === 's3' && ! $this->storage->configured()) {
+            return false;
+        }
+
         try {
-            $disk = Storage::disk($media->disk);
+            $disk = $this->storage->diskFor($media->disk);
 
             if ($disk->delete($media->path) === false && $disk->exists($media->path)) {
                 return false;
