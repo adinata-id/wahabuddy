@@ -10,6 +10,7 @@ use App\Enums\RecipientStatus;
 use App\Models\Broadcast;
 use App\Models\BroadcastRecipient;
 use App\Models\Story;
+use App\Services\Media\MediaStorage;
 use App\Services\Media\MediaUrlResolver;
 use App\Services\Sending\SessionSendGate;
 use App\Services\Waha\ConnectionRepository;
@@ -48,6 +49,7 @@ class ProcessBroadcastJob implements ShouldQueue
         WahaClient $client,
         SessionSendGate $gate,
         MediaUrlResolver $urls,
+        MediaStorage $storage,
     ): void {
         $broadcast = Broadcast::find($this->broadcastId);
 
@@ -92,15 +94,21 @@ class ProcessBroadcastJob implements ShouldQueue
 
             try {
                 if ($broadcast->type === BroadcastType::Image && $mediaUrl === null) {
-                    // Storage purged (cleanup race) or a legacy local-disk
-                    // row: no URL WAHA could fetch. Fail the recipient with
-                    // an explicit cause instead of crashing on the client's
-                    // guard — the outcome is deterministic, so it is held
-                    // for the admin, never auto-retried.
+                    // Storage purged (cleanup race), a legacy local-disk row,
+                    // or storage disabled: no URL WAHA could fetch. Fail the
+                    // recipient with an explicit cause instead of crashing on
+                    // the client's guard — the outcome is deterministic, so
+                    // it is held for the admin, never auto-retried.
+                    $disabled = $storage->configured() === false && $broadcast->mediaFile?->disk === 's3';
+
+                    $message = $disabled
+                        ? 'S3 storage is disabled or not configured (Settings → Storage); re-enable it, then retry.'
+                        : 'The media file is no longer available (purged by cleanup or stored on the removed local disk); upload new media and edit the broadcast.';
+
                     throw new WahaRequestException(
                         'media_unavailable',
                         null,
-                        'The media file is no longer available (purged by cleanup or stored on the removed local disk); upload new media and edit the broadcast.',
+                        $message,
                         'rejected',
                     );
                 }

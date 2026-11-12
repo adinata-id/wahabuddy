@@ -6,6 +6,7 @@ use App\Actions\Stories\ClaimStory;
 use App\Actions\Stories\CompleteStory;
 use App\Enums\StoryStatus;
 use App\Models\Story;
+use App\Services\Media\MediaStorage;
 use App\Services\Media\MediaUrlResolver;
 use App\Services\Sending\SessionSendGate;
 use App\Services\Waha\ConnectionRepository;
@@ -43,6 +44,7 @@ class SendStoryJob implements ShouldQueue
         WahaClient $client,
         SessionSendGate $gate,
         MediaUrlResolver $urls,
+        MediaStorage $storage,
     ): void {
         // Configuration is read fresh per execution, never cached across jobs.
         $snapshot = $connections->snapshot();
@@ -72,12 +74,18 @@ class SendStoryJob implements ShouldQueue
         if ($story->mediaFile !== null) {
             $mediaUrl = $urls->forSend($story->mediaFile);
 
-            // Storage purged (cleanup race) or a legacy local-disk row: no
-            // URL WAHA could fetch. Fail the story with an explicit cause
-            // instead of sending WAHA dead bytes and failing with a
-            // confusing fetch error.
+            // Storage purged (cleanup race), a legacy local-disk row, or
+            // storage disabled: no URL WAHA could fetch. Fail the story
+            // with an explicit cause instead of sending WAHA dead bytes
+            // and failing with a confusing fetch error. Disabled storage
+            // is fixable from Settings, so say so instead of describing a
+            // purge the admin cannot undo here.
             if ($mediaUrl === null) {
-                $message = 'The media file is no longer available (purged by cleanup or stored on the removed local disk); upload new media and edit the story.';
+                $disabled = $storage->configured() === false && $story->mediaFile->disk === 's3';
+
+                $message = $disabled
+                    ? 'S3 storage is disabled or not configured (Settings → Storage); re-enable it, then retry.'
+                    : 'The media file is no longer available (purged by cleanup or stored on the removed local disk); upload new media and edit the story.';
 
                 $marked = Story::query()
                     ->whereKey($story->id)

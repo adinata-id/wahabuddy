@@ -10,6 +10,7 @@ use App\Models\Broadcast;
 use App\Models\BroadcastRecipient;
 use App\Models\SendAttempt;
 use App\Services\Broadcasts\PacingClock;
+use App\Services\Media\MediaStorage;
 use App\Services\Sending\SessionSendGate;
 use App\Services\Waha\ConnectionRepository;
 use App\Services\Waha\DTO\SendResult;
@@ -30,6 +31,7 @@ final class CompleteRecipient
 
     public function __construct(
         private readonly PacingClock $clock,
+        private readonly MediaStorage $storage,
     ) {}
 
     public function handle(int $recipientId, string $attemptToken, SendResult|WahaRequestException $outcome): bool
@@ -120,11 +122,17 @@ final class CompleteRecipient
 
             // Unsendable media is campaign-wide and deterministic: pause so
             // the remaining recipients survive until the admin restores the
-            // media, instead of pacing through all of them as failures.
+            // media, instead of pacing through all of them as failures. The
+            // message names the actual cause: disabled storage is re-enabled
+            // from Settings, a purged file needs new media.
             if ($exception->errorCode === 'media_unavailable') {
+                $disabled = $this->storage->configured() === false && $broadcast->mediaFile?->disk === 's3';
+
                 $pauseCampaign = true;
                 $pauseEvent = 'paused_media_unavailable';
-                $pauseMessage = 'Campaign paused: the media file is no longer sendable. Upload new media, edit the broadcast, then resume.';
+                $pauseMessage = $disabled
+                    ? 'Campaign paused: S3 storage is disabled or not configured (Settings → Storage); re-enable it, then resume.'
+                    : 'Campaign paused: the media file is no longer sendable. Upload new media, edit the broadcast, then resume.';
             }
         }
 

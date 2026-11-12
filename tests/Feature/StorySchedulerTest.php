@@ -10,11 +10,13 @@ use App\Enums\SendAttemptSubject;
 use App\Enums\StoryStatus;
 use App\Jobs\SendStoryJob;
 use App\Models\MediaFile;
+use App\Models\S3Connection;
 use App\Models\SchedulerRun;
 use App\Models\SendAttempt;
 use App\Models\Story;
 use App\Models\User;
 use App\Models\WahaConnection;
+use App\Services\Media\MediaStorage;
 use App\Services\Media\MediaUrlResolver;
 use App\Services\Sending\SessionSendGate;
 use App\Services\Waha\ConnectionRepository;
@@ -78,6 +80,7 @@ class StorySchedulerTest extends TestCase
             app(WahaClient::class),
             app(SessionSendGate::class),
             app(MediaUrlResolver::class),
+            app(MediaStorage::class),
         );
     }
 
@@ -174,6 +177,29 @@ class StorySchedulerTest extends TestCase
             'story_id' => $story->id,
             'event' => 'failed_held',
         ]);
+    }
+
+    public function test_send_fails_with_disabled_storage_variant_message(): void
+    {
+        $this->workingConnection();
+        Http::preventStrayRequests();
+        $this->swapMediaStorageWithFake();
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+
+        $media = MediaFile::create([
+            'disk' => 's3', 'path' => 'stories/2026/11/x.jpg', 'original_name' => 'x.jpg',
+            'mime_type' => 'image/jpeg', 'size_bytes' => 1, 'created_by' => User::factory()->create()->id,
+        ]);
+
+        $story = $this->makeStory(['type' => 'image', 'media_file_id' => $media->id]);
+        $this->runJob($story);
+
+        $story = $story->fresh();
+        $this->assertSame(StoryStatus::Failed, $story->status);
+        $this->assertSame('media_unavailable', $story->last_error_code);
+        $this->assertStringContainsString('disabled or not configured', (string) $story->last_error);
     }
 
     public function test_dispatcher_does_not_redispatch_stories_held_for_admin(): void

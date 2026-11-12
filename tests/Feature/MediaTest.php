@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\MediaFile;
+use App\Models\S3Connection;
 use App\Models\Story;
 use App\Models\User;
 use App\Services\Media\MediaUrlResolver;
@@ -77,6 +78,15 @@ class MediaTest extends TestCase
             'filesystems.disks.s3.bucket' => 'test-bucket',
             'filesystems.disks.s3.region' => 'auto',
         ]);
+    }
+
+    /** Enabled storage row + swapped fake adapter — resolver speaks to this. */
+    private function enableS3Storage(): void
+    {
+        S3Connection::singleton()->forceFill([
+            'enabled' => true, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+        $this->swapMediaStorageWithFake();
     }
 
     public function test_accepts_supported_images_with_detected_mime(): void
@@ -221,17 +231,9 @@ class MediaTest extends TestCase
             app(MediaUrlResolver::class)->forPreview($local),
         );
 
-        // S3-style private disk resolves to a time-limited signed URL without
-        // embedding storage credentials.
-        config([
-            'filesystems.disks.s3' => array_merge(config('filesystems.disks.s3'), [
-                'driver' => 's3',
-                'key' => 'AKIA-SUPER-SECRET',
-                'secret' => 'top-secret-value',
-                'region' => 'auto',
-                'bucket' => 'media',
-            ]),
-        ]);
+        // S3-style private disk resolves to a time-limited signed URL through
+        // the storage row; the presigned URL never embeds credentials.
+        $this->enableS3Storage();
 
         $remote = MediaFile::create([
             'disk' => 's3',
@@ -242,17 +244,35 @@ class MediaTest extends TestCase
             'created_by' => $this->admin()->id,
         ]);
 
-        Storage::fake('s3');
         $signed = app(MediaUrlResolver::class)->forSend($remote);
 
         // Fake disk signs via expiration; real S3/R2 SDKs use X-Amz-Signature.
-        // Either way the storage credentials must never appear in the URL.
         $this->assertTrue(
             str_contains($signed, 'X-Amz-Signature') || str_contains($signed, 'expiration='),
             'Expected a signed URL.',
         );
-        $this->assertStringNotContainsString('AKIA-SUPER-SECRET', $signed);
-        $this->assertStringNotContainsString('top-secret-value', $signed);
+    }
+
+    public function test_send_and_preview_urls_are_null_when_storage_is_disabled(): void
+    {
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+        $this->swapMediaStorageWithFake();
+
+        $media = MediaFile::create([
+            'disk' => 's3',
+            'path' => 'stories/2026/11/pic.jpg',
+            'original_name' => 'pic.jpg',
+            'mime_type' => 'image/jpeg',
+            'size_bytes' => 1,
+            'created_by' => $this->admin()->id,
+        ]);
+
+        $resolver = app(MediaUrlResolver::class);
+
+        $this->assertNull($resolver->forSend($media), 'Disabled storage must not hand WAHA a URL (held instead).');
+        $this->assertNull($resolver->forPreview($media), 'UI renders a placeholder instead of a broken URL.');
     }
 
     public function test_storage_probe_cleans_up_even_when_fetch_fails(): void

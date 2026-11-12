@@ -16,10 +16,12 @@ use App\Enums\StoryStatus;
 use App\Jobs\ProcessBroadcastJob;
 use App\Models\Broadcast;
 use App\Models\MediaFile;
+use App\Models\S3Connection;
 use App\Models\Story;
 use App\Models\User;
 use App\Models\WahaConnection;
 use App\Services\Broadcasts\PacingClock;
+use App\Services\Media\MediaStorage;
 use App\Services\Media\MediaUrlResolver;
 use App\Services\Sending\SessionSendGate;
 use App\Services\Waha\ConnectionRepository;
@@ -79,6 +81,7 @@ class BroadcastTest extends TestCase
             app(WahaClient::class),
             app(SessionSendGate::class),
             app(MediaUrlResolver::class),
+            app(MediaStorage::class),
         );
     }
 
@@ -316,6 +319,48 @@ class BroadcastTest extends TestCase
             'broadcast_id' => $broadcast->id,
             'event' => 'paused_media_unavailable',
         ]);
+    }
+
+    public function test_image_recipient_fails_with_disabled_storage_variant_message(): void
+    {
+        $this->workingConnection();
+        Queue::fake();
+        Http::preventStrayRequests();
+        $this->swapMediaStorageWithFake();
+        S3Connection::singleton()->forceFill([
+            'enabled' => false, 'key' => 'k', 'secret' => 's', 'bucket' => 'b',
+        ])->save();
+
+        $media = MediaFile::create([
+            'disk' => 's3', 'path' => 'stories/2026/11/x.jpg', 'original_name' => 'x.jpg',
+            'mime_type' => 'image/jpeg', 'size_bytes' => 1, 'created_by' => User::factory()->create()->id,
+        ]);
+
+        $broadcast = $this->makeBroadcast([
+            'type' => BroadcastType::Image,
+            'media_file_id' => $media->id,
+            'status' => BroadcastStatus::Running,
+            'next_send_at' => now()->subSecond(),
+        ]);
+        $broadcast->recipients()->createMany([
+            ['chat_id' => '628111111111@c.us', 'rendered_text' => 'Hi!', 'status' => RecipientStatus::Pending],
+            ['chat_id' => '628222222222@c.us', 'rendered_text' => 'Hi!', 'status' => RecipientStatus::Pending],
+        ]);
+
+        $this->runJob($broadcast);
+
+        $failed = $broadcast->recipients()->where('chat_id', '628111111111@c.us')->first();
+        $this->assertSame(RecipientStatus::Failed, $failed->status);
+        $this->assertSame('media_unavailable', $failed->last_error_code);
+        $this->assertStringContainsString('disabled or not configured', (string) $failed->last_error);
+        Http::assertNothingSent();
+
+        // The pause message must name the actual cause: disabled storage the
+        // admin can re-enable, not a purged file needing a re-upload.
+        $this->assertSame(BroadcastStatus::Paused, $broadcast->fresh()->status);
+
+        $pauseLog = $broadcast->logs()->where('event', 'paused_media_unavailable')->firstOrFail();
+        $this->assertStringContainsString('disabled or not configured', (string) $pauseLog->message);
     }
 
     public function test_broadcasts_proceed_while_a_story_is_held_for_admin(): void

@@ -3,34 +3,34 @@
 namespace App\Services\Media;
 
 use App\Models\MediaFile;
-use Illuminate\Support\Facades\Storage;
 
 /**
- * Derives fresh, send-ready URLs for media. URLs are never persisted or
- * logged; private disks produce short-lived presigned URLs (spec H.3).
+ * Derives fresh, send-ready URLs for media through MediaStorage. URLs are
+ * never persisted or logged; the private s3 disk produces short-lived
+ * presigned URLs (spec H.3) and disabled storage yields null instead of a
+ * dead URL.
  */
 final class MediaUrlResolver
 {
     private const SIGNED_URL_TTL_MINUTES = 15;
 
+    public function __construct(private readonly MediaStorage $storage) {}
+
     /**
      * Fresh URL for the send pipeline. Null when the stored object was
-     * purged, its disk can no longer be resolved, or it lives on a disk
-     * without presigned URLs (legacy local-disk rows) — the caller must
-     * fail the send explicitly instead of handing WAHA a dead URL.
+     * purged, does not live on the s3 disk (legacy local-disk rows have no
+     * URL a remote WAHA could fetch), or storage is disabled or not
+     * configured — the caller must fail the send explicitly instead of
+     * handing WAHA a dead URL.
      */
     public function forSend(MediaFile $media): ?string
     {
-        if ($media->purged_at !== null) {
-            return null;
-        }
-
-        if (! $this->diskSupportsTemporaryUrls($media->disk)) {
+        if ($media->purged_at !== null || $media->disk !== 's3' || ! $this->storage->configured()) {
             return null;
         }
 
         try {
-            return Storage::disk($media->disk)
+            return $this->storage->diskFor('s3')
                 ->temporaryUrl($media->path, now()->addMinutes(self::SIGNED_URL_TTL_MINUTES));
         } catch (\Throwable) {
             return null;
@@ -38,11 +38,11 @@ final class MediaUrlResolver
     }
 
     /**
-     * Long-lived preview URL for UI thumbnails (local public disk or bucket
-     * custom domain); falls back to a temporary URL for private disks.
-     * Returns null once the stored object was purged by cleanup (or its
-     * disk cannot be resolved) — callers render a placeholder instead of a
-     * broken URL.
+     * Long-lived preview URL for UI thumbnails (local public disk); private
+     * s3 media falls back to a short-lived presigned URL — null while
+     * storage is disabled or not configured. Also null once the stored
+     * object was purged by cleanup — callers render a placeholder instead
+     * of a broken URL.
      */
     public function forPreview(MediaFile $media): ?string
     {
@@ -51,24 +51,18 @@ final class MediaUrlResolver
         }
 
         try {
-            $disk = Storage::disk($media->disk);
+            if ($media->disk === 's3') {
+                if (! $this->storage->configured()) {
+                    return null;
+                }
+
+                return $this->storage->diskFor('s3')
+                    ->temporaryUrl($media->path, now()->addMinutes(self::SIGNED_URL_TTL_MINUTES));
+            }
+
+            return $this->storage->diskFor($media->disk)->url($media->path);
         } catch (\Throwable) {
             return null;
         }
-
-        if ($this->diskSupportsTemporaryUrls($media->disk)) {
-            return $disk->temporaryUrl($media->path, now()->addMinutes(self::SIGNED_URL_TTL_MINUTES));
-        }
-
-        return $disk->url($media->path);
-    }
-
-    private function diskSupportsTemporaryUrls(string $diskName): bool
-    {
-        $config = config("filesystems.disks.{$diskName}");
-
-        // Only object-storage style drivers produce presigned URLs; the local
-        // public disk is plain public access.
-        return in_array($config['driver'] ?? 'local', ['s3'], true);
     }
 }
