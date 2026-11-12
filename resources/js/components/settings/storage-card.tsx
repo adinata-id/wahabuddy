@@ -167,15 +167,28 @@ export function StorageCard({ storage }: { storage: StorageSettings }) {
     };
 
     // One Save, two requests: the connection slice and the cleanup slice
-    // live on different endpoints; each gets its own toast.
+    // live on different endpoints; each gets its own toast. The cleanup
+    // save is CHAINED after the connection save — a second Inertia visit
+    // cancels the in-flight one, so firing both together silently drops
+    // the connection save. Cleanup only follows a successful connection
+    // save so its field errors stay visible. The transform routes the
+    // save through connectionPayload() so a blank key/secret is omitted
+    // (kept server-side) instead of clearing the stored key.
     const submitAll = () => {
+        connectionForm.transform(() => connectionPayload());
+
         connectionForm.put(updateStorageRoute.url(), {
             preserveScroll: true,
-            onSuccess: () => toast.success('Storage connection saved.'),
+            onSuccess: () => {
+                toast.success('Storage connection saved.');
+                saveCleanup();
+            },
             onError: () =>
                 toast.error('Storage connection could not be saved.'),
         });
+    };
 
+    const saveCleanup = () => {
         cleanupForm.transform((data) => ({
             ...data,
             // Laravel's boolean rule wants 1/0, not "true"/"false" form
