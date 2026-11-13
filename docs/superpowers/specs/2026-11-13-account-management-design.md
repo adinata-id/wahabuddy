@@ -1,6 +1,6 @@
 # Account Management and Access Roles Design
 
-Status: Builder-reviewed draft for owner approval. No application implementation is authorized by this document alone. Owner opted for written design without browser mockups.
+Status: Approved by the owner on 2026-11-13 for implementation planning. Application implementation requires the subsequent execution handoff. Owner opted for written design without browser mockups.
 
 ## Intent and agreed scope
 
@@ -13,7 +13,7 @@ Agreed account creation modes:
 
 Agreed lifecycle: suspend, reactivate, and soft delete accounts. Preserve media and scheduled work. Administrators cannot suspend/delete themselves, and at least one usable administrator must remain.
 
-Implementation decisions proposed below are explicitly the designer's defaults, subject to owner review.
+Implementation decisions below were proposed as the designer's defaults and included in the approved document.
 
 ## Existing application and constraints
 
