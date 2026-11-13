@@ -1,0 +1,5 @@
+# Synthetic S3 credentials in historical test fixtures and their implementation plan.
+2f1e55314cc243f731f8fe695d0e5157a715dadd:tests/Feature/StorageSettingsTest.php:generic-api-key:578
+3be2822a3761689df2248e91ec7e04ddd3eb8b1d:tests/Feature/StorageSettingsTest.php:generic-api-key:356
+a330a6fcfeb8e8517d344ffdfe59b2b21256fada:tests/Feature/MediaTest.php:generic-api-key:77
+8c966f566252309be8163d9baf6758427ebc7fc9:docs/superpowers/plans/2026-11-11-s3-storage-settings.md:generic-api-key:776
