@@ -44,16 +44,16 @@ Confirm actual versions with `composer show --direct` and package-specific `comp
 
 The following files are the ownership map. New subdirectories stay inside existing `app`, `resources/js`, `database`, and `tests` roots:
 
-| Responsibility | Files |
-| --- | --- |
-| Dependency/schema/roles | `composer.json`, `composer.lock`, `config/permission.php`, `database/migrations/<generated>_create_permission_tables.php`, `database/migrations/<generated>_add_account_management_fields_to_users_table.php`, `database/seeders/RolesAndPermissionsSeeder.php` |
-| State, fixtures, shared lock, bootstrap | `app/Models/User.php`, `database/factories/UserFactory.php`, `app/Services/Accounts/AdminAccountGuard.php`, `app/Console/Commands/BootstrapAccountAccess.php`, `app/Console/Commands/CreateAdmin.php` |
-| Lifecycle and existing profile paths | `app/Actions/Accounts/ManageAccount.php`, `app/Http/Controllers/UsersController.php`, `app/Http/Requests/UpdateUserRoleRequest.php`, `app/Http/Controllers/Settings/ProfileController.php`, `app/Models/MediaFile.php` |
-| Invitations and activation | `app/Actions/Accounts/CreateAccount.php`, `app/Actions/Accounts/ActivateAccount.php`, `app/Services/Accounts/AccountInvitations.php`, `app/Notifications/AccountActivation.php`, `app/Http/Controllers/Auth/AccountActivationController.php`, `app/Http/Requests/StoreUserRequest.php`, `app/Http/Requests/ActivateAccountRequest.php`, `config/wahabuddy.php` |
-| Session enforcement | `app/Listeners/StampAuthenticationVersion.php`, `app/Http/Middleware/EnsureAccountIsActive.php`, `bootstrap/app.php`, `app/Actions/Fortify/ResetUserPassword.php`, `tests/TestCase.php` |
-| Route authorization/list data | `routes/web.php`, `routes/settings.php`, `app/Providers/AppServiceProvider.php`, `app/Http/Middleware/HandleInertiaRequests.php`, `config/fortify.php` |
-| Account UI and typed navigation | `resources/js/pages/users/index.tsx`, `resources/js/pages/users/components/create-user-dialog.tsx`, `resources/js/pages/users/components/user-actions.tsx`, `resources/js/pages/auth/activate-account.tsx`, `resources/js/types/accounts.ts`, `resources/js/types/auth.ts`, `resources/js/components/app-sidebar.tsx`, `resources/js/components/app-header.tsx` |
-| Regression coverage | Exact test files are listed in each task below. Update existing tests only where the new roles/session contract affects their setup or assertions. |
+| Responsibility                          | Files                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependency/schema/roles                 | `composer.json`, `composer.lock`, `config/permission.php`, `database/migrations/<generated>_create_permission_tables.php`, `database/migrations/<generated>_add_account_management_fields_to_users_table.php`, `database/seeders/RolesAndPermissionsSeeder.php`                                                                                                 |
+| State, fixtures, shared lock, bootstrap | `app/Models/User.php`, `database/factories/UserFactory.php`, `app/Services/Accounts/AdminAccountGuard.php`, `app/Console/Commands/BootstrapAccountAccess.php`, `app/Console/Commands/CreateAdmin.php`                                                                                                                                                           |
+| Lifecycle and existing profile paths    | `app/Actions/Accounts/ManageAccount.php`, `app/Http/Controllers/UsersController.php`, `app/Http/Requests/UpdateUserRoleRequest.php`, `app/Http/Controllers/Settings/ProfileController.php`, `app/Models/MediaFile.php`                                                                                                                                          |
+| Invitations and activation              | `app/Actions/Accounts/CreateAccount.php`, `app/Actions/Accounts/ActivateAccount.php`, `app/Services/Accounts/AccountInvitations.php`, `app/Notifications/AccountActivation.php`, `app/Http/Controllers/Auth/AccountActivationController.php`, `app/Http/Requests/StoreUserRequest.php`, `app/Http/Requests/ActivateAccountRequest.php`, `config/wahabuddy.php`  |
+| Session enforcement                     | `app/Listeners/StampAuthenticationVersion.php`, `app/Http/Middleware/EnsureAccountIsActive.php`, `bootstrap/app.php`, `app/Actions/Fortify/ResetUserPassword.php`, `tests/TestCase.php`                                                                                                                                                                         |
+| Route authorization/list data           | `routes/web.php`, `routes/settings.php`, `app/Providers/AppServiceProvider.php`, `app/Http/Middleware/HandleInertiaRequests.php`, `config/fortify.php`                                                                                                                                                                                                          |
+| Account UI and typed navigation         | `resources/js/pages/users/index.tsx`, `resources/js/pages/users/components/create-user-dialog.tsx`, `resources/js/pages/users/components/user-actions.tsx`, `resources/js/pages/auth/activate-account.tsx`, `resources/js/types/accounts.ts`, `resources/js/types/auth.ts`, `resources/js/components/app-sidebar.tsx`, `resources/js/components/app-header.tsx` |
+| Regression coverage                     | Exact test files are listed in each task below. Update existing tests only where the new roles/session contract affects their setup or assertions.                                                                                                                                                                                                              |
 
 Use actual Artisan-generated migration timestamps rather than fixed dates. Never hand edit generated Wayfinder output.
 
@@ -62,6 +62,7 @@ Use actual Artisan-generated migration timestamps rather than fixed dates. Never
 **Files:** Dependency/schema/roles and state/bootstrap rows above; tests `tests/Feature/AccountAccessBootstrapTest.php`, `tests/Feature/AccountStateTest.php`, existing `tests/Feature/AdminAccessTest.php`.
 
 **Interfaces:**
+
 - `User::isActivated(): bool`, `User::isSuspended(): bool`, `User::isUsableAdministrator(): bool`, `User::accountStatus(): string` (`suspended|invited|awaiting_verification|active`). Soft-deleted users remain excluded by the default query scope.
 - `UserFactory::admin(): static`, `regularUser(): static`, `invited(): static`, `suspended(): static`. Default factory users are activated/verified, not administrators; explicit role states initialize role definitions and assign exactly one role after creation.
 - `AdminAccountGuard::lock(): Role` locks the seeded `admin` row and **requires an open transaction**. All callers lock it first, then any affected user rows by ascending id. Refresh role relations after locking; do not trust request-bound user state.
@@ -112,6 +113,7 @@ Run Pint on dirty PHP. Stage only this task's files and commit `feat: add accoun
 **Files:** Lifecycle row above; `routes/web.php` (lifecycle routes), `routes/settings.php` if needed; tests `tests/Feature/UserLifecycleTest.php`, `tests/Integration/AccountConcurrencyTest.php`, existing `tests/Feature/Settings/ProfileUpdateTest.php`, `tests/Feature/MediaTest.php`.
 
 **Interfaces:**
+
 - Consumes Task 1 state, factory roles, `AdminAccountGuard::lock()`.
 - Guard additions: `assertAdministrator(User $actor): void`, `assertMayDeactivate(User $actor, User $target): void`, `assertMayChangeEmail(User $user, string $email): void`; reject unauthorized actors with 403, protected operations with a `ValidationException` keyed `account` (or `email` for profile email changes).
 - `ManageAccount::suspend(User $actor, User $target): void`, `reactivate(User $actor, User $target): void`, `changeRole(User $actor, User $target, string $role): void`, `delete(User $actor, User $target): void`, `deleteOwnAccount(User $user): void`, `updateOwnProfile(User $user, array $attributes): void`. PHPDoc profile array shape is `{name: string, email: string}`.
@@ -159,6 +161,7 @@ Run the targeted preservation tests in `MediaTest.php` and `StorySchedulerTest.p
 **Files:** Invitations/activation row above; `UsersController` create/resend methods; `routes/web.php`; extend `AccountConcurrencyTest`; tests `tests/Feature/UserCreationTest.php`, `tests/Feature/AccountActivationTest.php`, `tests/Feature/InvitationDeliveryTest.php`.
 
 **Interfaces:**
+
 - `CreateAccount::handle(User $actor, array $data): array` returns PHPDoc shape `{user: User, invitation_sent: bool|null}`; input shape `{name: string, email: string, role: 'admin'|'user', mode: 'invite'|'direct', password?: string, password_confirmation?: string}`.
 - `AccountInvitations::prepareLocked(User $user): string` rotates fields and returns plaintext token; requires the common lock and a locked pending user inside a transaction. `deliver(User $user, string $token): bool` sends after commit and conditionally records acceptance for that hash. `resend(User $actor, User $target): bool` wraps authorization, locks, rotation/commit and delivery. `findValid(int $userId, string $token): ?User` is a read-only eligibility check for GET.
 - `AccountActivation::__construct(string $activationUrl)` and `toMail(object $notifiable): MailMessage`, delivered synchronously; no `ShouldQueue`. Never include password or token hash.
@@ -217,6 +220,7 @@ Expected: all feature cases and actual MySQL competing activation checks pass. C
 **Files:** Session enforcement row above; existing `tests/Feature/Auth/AuthenticationTest.php`, `TwoFactorChallengeTest.php`, `PasswordResetTest.php`; new `tests/Feature/AccountSessionAccessTest.php`, `tests/Feature/PasskeyAccountAccessTest.php`.
 
 **Interfaces:**
+
 - `StampAuthenticationVersion::handle(Login $event): void` stamps session `auth_version` from the authenticated model's version (not a later unconditionally refreshed version that could bless an earlier login racing revocation).
 - `EnsureAccountIsActive::handle(Request $request, Closure $next): Symfony\Component\HttpFoundation\Response` checks fresh DB state/version before downstream handling and again after it returns. Valid means nondeleted, unsuspended, activated and matching session version; ordinary email verification remains separate.
 - Test helper `Tests\TestCase::actingAsActiveAccount(User $user): static` sets the real session version then uses normal authentication. Do not override `actingAs`, disable middleware, auto-stamp missing versions in production, or auto-make fixtures admin.
@@ -262,6 +266,7 @@ If any Fortify login path bypasses Login events, adapt that supported contract e
 **Files:** Route authorization/list data row; `UsersController::index`; `tests/Feature/UserManagementAccessTest.php`, `tests/Feature/UserListTest.php`, existing `SettingsTest.php`, `StorageSettingsTest.php`, `AdminAccessTest.php` and any other tests calling settings endpoints.
 
 **Interfaces:**
+
 - `UsersController::index(Request $request): Inertia\Response` returns `users/index`.
 - `GET /users` → `users.index` guarded by `auth`, `verified`, `can:users.manage`.
 - Inertia shared `auth.role: 'admin'|'user'|null`; `auth.capabilities: { manageSettings: boolean, manageUsers: boolean }`. Preserve existing `auth.user` shape as needed without returning loaded roles/pivots or activation/session secrets.
@@ -306,6 +311,7 @@ Expected: authorized behavior passes and ordinary users are denied on every admi
 **Files:** UI/types row in the file map; `resources/js/types/index.ts` for exports if used; extend `UserListTest` / `AccountActivationTest` only for additional page-prop contracts.
 
 **Interfaces:**
+
 - Consume Task 5 `AccountRow`, `Auth` capabilities and pagination props; define exported TypeScript types `AccountRole`, `AccountStatus`, `AccountRow`, `AccountIndexProps` in `types/accounts.ts` matching those exact server keys.
 - `UsersIndex(props: AccountIndexProps)` default export at `pages/users/index.tsx`.
 - `CreateUserDialog({ passwordRules }: { passwordRules: string|null })` and `UserActions({ user }: { user: AccountRow })` named exports from their matching components.

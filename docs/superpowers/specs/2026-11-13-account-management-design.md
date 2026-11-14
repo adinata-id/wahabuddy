@@ -37,13 +37,13 @@ For deletion, permanent deletion would require changing media ownership or delet
 
 Spatie `HasRoles` on `User`; one role per account through application validation. Use guard `web`, without teams, wildcard grants, or direct user permissions.
 
-| Capability | admin | user |
-| --- | --- | --- |
-| Dashboard, Stories, Broadcasts, Contacts, media operations | Yes | Yes |
-| Own profile, password, 2FA, passkeys, appearance, logout | Yes | Yes |
-| Application Settings, WAHA, storage, preferences, cleanup | Yes | No |
-| Account list, create, assign role, resend invitation, suspend, reactivate, delete | Yes | No |
-| Public account registration | No | No |
+| Capability                                                                        | admin | user |
+| --------------------------------------------------------------------------------- | ----- | ---- |
+| Dashboard, Stories, Broadcasts, Contacts, media operations                        | Yes   | Yes  |
+| Own profile, password, 2FA, passkeys, appearance, logout                          | Yes   | Yes  |
+| Application Settings, WAHA, storage, preferences, cleanup                         | Yes   | No   |
+| Account list, create, assign role, resend invitation, suspend, reactivate, delete | Yes   | No   |
+| Public account registration                                                       | No    | No   |
 
 Seed fixed permissions `settings.manage` and `users.manage`, granted only to `admin`. No role/permission editor is included. Both roles use existing shared operational data; no tenancy or ownership isolation is introduced.
 
